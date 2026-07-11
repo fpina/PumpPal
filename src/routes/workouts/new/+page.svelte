@@ -9,71 +9,88 @@
 		.slice(0, 10);
 </script>
 
-<section class="mx-auto max-w-2xl">
-	<a href="/" class="text-sm font-semibold text-indigo-700 hover:underline">← Back to workouts</a>
-	<div class="mt-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-		<p class="text-sm font-semibold uppercase tracking-wider text-indigo-600">New entry</p>
-		<h1 class="mt-1 text-3xl font-bold tracking-tight text-slate-900">Log a workout</h1>
-		<p class="mt-2 text-slate-600">Create the session first, then record its exercises and sets.</p>
+<section class="mx-auto max-w-5xl">
+	<a href="/" class="back-link">← Back to workouts</a>
+	<div class="mt-5 grid gap-5 lg:grid-cols-[1fr_0.48fr]">
+		<div class="surface p-6 sm:p-9">
+			<p class="eyebrow">New session</p>
+			<h1 class="page-title mt-5">Log the work.</h1>
+			<p class="mt-4 max-w-xl text-sm leading-6 text-[#8da097]">
+				Name the session, set the date, and capture the context. You’ll add exercises and sets on
+				the next screen.
+			</p>
 
-		{#if form?.message}<p class="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-				{form.message}
-			</p>{/if}
+			{#if form?.message}<p class="status-message mt-5">{form.message}</p>{/if}
 
-		<form method="POST" action="?/create" use:enhance class="mt-6 space-y-5">
-			<div>
-				<label for="date" class="block text-sm font-medium text-slate-700">Date</label>
-				<input
-					type="date"
-					id="date"
-					name="date"
-					value={form?.values?.date ?? localToday}
-					required
-					class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-				/>
-				{#if form?.errors?.date}<p class="mt-1 text-sm text-red-600">{form.errors.date[0]}</p>{/if}
-			</div>
-
-			<div>
-				<label for="name" class="block text-sm font-medium text-slate-700"
-					>Workout name <span class="font-normal text-slate-400">optional</span></label
+			<form method="POST" action="?/create" use:enhance class="mt-7 space-y-5">
+				<div>
+					<label for="date" class="field-label">Training date</label><input
+						type="date"
+						id="date"
+						name="date"
+						value={form?.values?.date ?? localToday}
+						required
+						class="field-control"
+					/>{#if form?.errors?.date}<p class="field-error">{form.errors.date[0]}</p>{/if}
+				</div>
+				<div>
+					<label for="name" class="field-label"
+						>Workout name <span class="normal-case tracking-normal text-[#61756b]">— optional</span
+						></label
+					><input
+						type="text"
+						id="name"
+						name="name"
+						value={form?.values?.name ?? ''}
+						maxlength="255"
+						placeholder="Push day, heavy legs, morning run…"
+						class="field-control"
+					/>{#if form?.errors?.name}<p class="field-error">{form.errors.name[0]}</p>{/if}
+				</div>
+				<div>
+					<label for="notes" class="field-label"
+						>Session notes <span class="normal-case tracking-normal text-[#61756b]">— optional</span
+						></label
+					><textarea
+						id="notes"
+						name="notes"
+						rows="5"
+						maxlength="2000"
+						placeholder="Goals, energy level, focus for today…"
+						class="field-control resize-y">{form?.values?.notes ?? ''}</textarea
+					>{#if form?.errors?.notes}<p class="field-error">{form.errors.notes[0]}</p>{/if}
+				</div>
+				<button type="submit" class="button-primary w-full sm:w-auto"
+					>Save & build workout <span aria-hidden="true">→</span></button
 				>
-				<input
-					type="text"
-					id="name"
-					name="name"
-					value={form?.values?.name ?? ''}
-					maxlength="255"
-					placeholder="Push day, morning run…"
-					class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-				/>
-				{#if form?.errors?.name}<p class="mt-1 text-sm text-red-600">{form.errors.name[0]}</p>{/if}
-			</div>
+			</form>
+		</div>
 
-			<div>
-				<label for="notes" class="block text-sm font-medium text-slate-700"
-					>Notes <span class="font-normal text-slate-400">optional</span></label
+		<aside class="space-y-5">
+			<div class="sport-stripe surface p-6">
+				<span class="grid size-11 place-items-center rounded-xl bg-[#c8ff3d]/10 text-[#c8ff3d]"
+					><svg
+						viewBox="0 0 24 24"
+						class="size-6"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						aria-hidden="true"><path d="M13 2L4.5 13h6L9 22l8.5-12h-6L13 2z" /></svg
+					></span
 				>
-				<textarea
-					id="notes"
-					name="notes"
-					rows="4"
-					maxlength="2000"
-					placeholder="How did the session feel?"
-					class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-					>{form?.values?.notes ?? ''}</textarea
-				>
-				{#if form?.errors?.notes}<p class="mt-1 text-sm text-red-600">
-						{form.errors.notes[0]}
-					</p>{/if}
+				<h2 class="mt-5 text-xl font-black">Make it specific.</h2>
+				<p class="mt-2 text-sm leading-6 text-[#82958c]">
+					Clear session names make your history easier to scan and your routines easier to repeat.
+				</p>
 			</div>
-
-			<button
-				type="submit"
-				class="w-full rounded-lg bg-indigo-600 px-4 py-2.5 font-semibold text-white hover:bg-indigo-700"
-			>
-				Save and add exercises
-			</button>
-		</form>
+			<div class="surface-soft p-5">
+				<p class="text-[0.65rem] font-extrabold uppercase tracking-[0.16em] text-[#3ee8cf]">
+					Today’s cue
+				</p>
+				<p class="mt-2 text-sm font-semibold leading-6 text-[#b5c3bc]">
+					Quality reps. Full range. Leave the ego outside.
+				</p>
+			</div>
+		</aside>
 	</div>
 </section>
