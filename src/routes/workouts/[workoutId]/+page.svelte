@@ -8,6 +8,12 @@
 		month: 'long',
 		day: 'numeric'
 	});
+
+	const workoutDate = $derived(new Date(data.workout.date).toISOString().slice(0, 10));
+
+	function confirmSubmission(event: SubmitEvent, message: string) {
+		if (!window.confirm(message)) event.preventDefault();
+	}
 </script>
 
 <div class="space-y-8">
@@ -41,6 +47,67 @@
 			</div>
 		</div>
 	</section>
+
+	<details class="surface group overflow-hidden">
+		<summary
+			class="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 font-bold text-white sm:px-7"
+		>
+			<span>Edit workout details</span>
+			<span class="text-[#c8ff3d] transition group-open:rotate-45">+</span>
+		</summary>
+		<div class="border-t border-white/6 p-5 sm:p-7">
+			<form method="POST" action="?/updateWorkout" use:enhance class="grid gap-4 lg:grid-cols-2">
+				<input type="hidden" name="workoutId" value={data.workout.id} />
+				<div>
+					<label for="workout-name" class="field-label">Workout name</label>
+					<input
+						id="workout-name"
+						name="name"
+						maxlength="255"
+						value={data.workout.name ?? ''}
+						class="field-control"
+					/>
+				</div>
+				<div>
+					<label for="workout-date" class="field-label">Date</label>
+					<input
+						id="workout-date"
+						type="date"
+						name="date"
+						value={workoutDate}
+						required
+						class="field-control"
+					/>
+				</div>
+				<div class="lg:col-span-2">
+					<label for="workout-notes" class="field-label">Notes</label>
+					<textarea id="workout-notes" name="notes" maxlength="2000" rows="3" class="field-control"
+						>{data.workout.notes ?? ''}</textarea
+					>
+				</div>
+				<div class="flex flex-wrap justify-between gap-3 lg:col-span-2">
+					<button type="submit" class="button-primary">Save workout</button>
+				</div>
+			</form>
+			<form
+				method="POST"
+				action="?/deleteWorkout"
+				onsubmit={(event) =>
+					confirmSubmission(
+						event,
+						'Delete this workout and all of its sets? This cannot be undone.'
+					)}
+				class="mt-5 border-t border-white/6 pt-5"
+			>
+				<input type="hidden" name="workoutId" value={data.workout.id} />
+				<button
+					type="submit"
+					class="button-ghost !border-red-400/25 !text-red-300 hover:!bg-red-400/10"
+					>Delete workout</button
+				>
+			</form>
+		</div>
+	</details>
 
 	{#if form?.message}
 		<p
@@ -99,10 +166,28 @@
 								</p>{/if}
 						</div>
 					</div>
-					{#if workoutExercise.exercise.muscleGroup}<span
-							class="rounded-full border border-[#3ee8cf]/20 bg-[#3ee8cf]/8 px-3 py-1.5 text-[0.65rem] font-extrabold uppercase tracking-[0.12em] text-[#3ee8cf]"
-							>{workoutExercise.exercise.muscleGroup}</span
-						>{/if}
+					<div class="flex items-center gap-3">
+						{#if workoutExercise.exercise.muscleGroup}<span
+								class="rounded-full border border-[#3ee8cf]/20 bg-[#3ee8cf]/8 px-3 py-1.5 text-[0.65rem] font-extrabold uppercase tracking-[0.12em] text-[#3ee8cf]"
+								>{workoutExercise.exercise.muscleGroup}</span
+							>{/if}
+						<form
+							method="POST"
+							action="?/removeExercise"
+							use:enhance
+							onsubmit={(event) =>
+								confirmSubmission(
+									event,
+									`Remove ${workoutExercise.exercise.name} and all of its sets?`
+								)}
+						>
+							<input type="hidden" name="workoutExerciseId" value={workoutExercise.id} />
+							<button
+								type="submit"
+								class="text-xs font-bold text-red-300 transition hover:text-red-200">Remove</button
+							>
+						</form>
+					</div>
 				</header>
 
 				<div class="p-5 sm:p-7">
@@ -114,7 +199,9 @@
 									><tr
 										><th class="px-4 py-3">Set</th><th class="px-4 py-3">Reps</th><th
 											class="px-4 py-3">Load</th
-										><th class="px-4 py-3">Rest</th><th class="px-4 py-3">Status</th></tr
+										><th class="px-4 py-3">Rest</th><th class="px-4 py-3">Status</th><th
+											class="px-4 py-3">Actions</th
+										></tr
 									></thead
 								>
 								<tbody class="divide-y divide-white/5">
@@ -133,6 +220,126 @@
 													class={`rounded-full px-2.5 py-1 text-[0.65rem] font-extrabold uppercase tracking-wider ${exerciseSet.completed ? 'bg-[#c8ff3d]/8 text-[#c8ff3d]' : 'bg-white/5 text-[#71847a]'}`}
 													>{exerciseSet.completed ? 'Complete' : 'Planned'}</span
 												></td
+											>
+											<td class="px-4 py-3.5"
+												><details class="group">
+													<summary
+														class="cursor-pointer list-none text-xs font-bold text-[#3ee8cf] hover:text-[#6ff5df]"
+														>Edit</summary
+													>
+													<div class="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm"></div>
+													<div
+														class="fixed inset-x-4 top-1/2 z-50 mx-auto max-w-xl -translate-y-1/2 rounded-2xl border border-white/10 bg-[#101b16] p-5 shadow-2xl sm:p-7"
+													>
+														<div class="mb-5 flex items-center justify-between">
+															<h4 class="text-lg font-black text-white">
+																Edit set #{exerciseSet.setNumber}
+															</h4>
+															<span class="text-xs text-[#71847a]">Click Edit again to close</span>
+														</div>
+														<form
+															method="POST"
+															action="?/updateSet"
+															use:enhance
+															class="grid gap-3 sm:grid-cols-2"
+														>
+															<input type="hidden" name="setId" value={exerciseSet.id} /><input
+																type="hidden"
+																name="workoutExerciseId"
+																value={workoutExercise.id}
+															/>
+															<div>
+																<label class="field-label" for={`edit-number-${exerciseSet.id}`}
+																	>Set</label
+																><input
+																	class="field-control"
+																	id={`edit-number-${exerciseSet.id}`}
+																	type="number"
+																	name="setNumber"
+																	min="1"
+																	value={exerciseSet.setNumber}
+																	required
+																/>
+															</div>
+															<div>
+																<label class="field-label" for={`edit-reps-${exerciseSet.id}`}
+																	>Reps</label
+																><input
+																	class="field-control"
+																	id={`edit-reps-${exerciseSet.id}`}
+																	type="number"
+																	name="reps"
+																	min="0"
+																	value={exerciseSet.reps}
+																	required
+																/>
+															</div>
+															<div>
+																<label class="field-label" for={`edit-weight-${exerciseSet.id}`}
+																	>Weight</label
+																><input
+																	class="field-control"
+																	id={`edit-weight-${exerciseSet.id}`}
+																	type="number"
+																	name="weight"
+																	min="0"
+																	step="0.01"
+																	value={exerciseSet.weight ?? ''}
+																/>
+															</div>
+															<div>
+																<label class="field-label" for={`edit-unit-${exerciseSet.id}`}
+																	>Unit</label
+																><select
+																	class="field-control"
+																	id={`edit-unit-${exerciseSet.id}`}
+																	name="weightUnit"
+																	><option value="kg" selected={exerciseSet.weightUnit === 'kg'}
+																		>kg</option
+																	><option value="lb" selected={exerciseSet.weightUnit === 'lb'}
+																		>lb</option
+																	></select
+																>
+															</div>
+															<div>
+																<label class="field-label" for={`edit-rest-${exerciseSet.id}`}
+																	>Rest seconds</label
+																><input
+																	class="field-control"
+																	id={`edit-rest-${exerciseSet.id}`}
+																	type="number"
+																	name="restTimeSeconds"
+																	min="0"
+																	value={exerciseSet.restTimeSeconds ?? ''}
+																/>
+															</div>
+															<label
+																class="flex items-center gap-2 self-end pb-3 text-sm font-bold text-[#b1c0b8]"
+																><input
+																	type="checkbox"
+																	name="completed"
+																	checked={exerciseSet.completed}
+																	class="size-4 accent-[#c8ff3d]"
+																/> Completed</label
+															>
+															<button type="submit" class="button-primary">Save set</button>
+														</form>
+														<form
+															method="POST"
+															action="?/deleteSet"
+															use:enhance
+															onsubmit={(event) =>
+																confirmSubmission(event, `Delete set #${exerciseSet.setNumber}?`)}
+															class="mt-3"
+														>
+															<input type="hidden" name="setId" value={exerciseSet.id} /><button
+																type="submit"
+																class="text-xs font-bold text-red-300 hover:text-red-200"
+																>Delete set</button
+															>
+														</form>
+													</div>
+												</details></td
 											></tr
 										>
 									{/each}

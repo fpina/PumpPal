@@ -17,5 +17,8 @@ export const auth = betterAuth({
 	emailAndPassword: {
 		enabled: true
 	},
+	rateLimit: {
+		enabled: env.E2E_TESTING !== 'true'
+	},
 	plugins: [sveltekitCookies(getRequestEvent)]
 });
