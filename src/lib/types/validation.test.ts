@@ -3,6 +3,7 @@ import { loginSchema, registerSchema } from './register.validation';
 import {
 	addSetSchema,
 	createWorkoutSchema,
+	liveSetSchema,
 	repeatWorkoutSchema,
 	setMutationSchema,
 	updateSetSchema,
@@ -123,6 +124,21 @@ describe('workout validation', () => {
 				workoutId: '4',
 				repeatToken: 'reused-token'
 			}).success
+		);
+	});
+
+	it('validates actual results recorded during a live workout', () => {
+		const result = liveSetSchema.safeParse({
+			setId: '7',
+			reps: '9',
+			weight: '82.5',
+			weightUnit: 'kg'
+		});
+
+		assert.isTrue(result.success);
+		if (result.success) assert.strictEqual(result.data.weight, 82.5);
+		assert.isFalse(
+			liveSetSchema.safeParse({ setId: '7', reps: '-1', weight: '', weightUnit: 'stone' }).success
 		);
 	});
 });

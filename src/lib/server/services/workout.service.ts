@@ -4,7 +4,7 @@ import type {
 	CreateWorkoutSchemaType,
 	RepeatWorkoutSchemaType
 } from '$lib/types/workout.validation';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, ne } from 'drizzle-orm';
 
 interface AddExerciseToWorkoutInput {
 	workoutId: number;
@@ -33,6 +33,13 @@ interface AddSetToWorkoutExerciseInput {
 
 interface UpdateSetInput extends AddSetToWorkoutExerciseInput {
 	setId: number;
+}
+
+interface CompleteLiveSetInput {
+	setId: number;
+	reps: number;
+	weight?: number | null;
+	weightUnit: 'kg' | 'lb';
 }
 
 export class WorkoutService {
@@ -85,6 +92,259 @@ export class WorkoutService {
 		);
 	}
 
+	async startWorkout(userId: string, workoutId: number) {
+		const [startedWorkout] = await db
+			.update(workout)
+			.set({ sessionStatus: 'active', startedAt: new Date(), finishedAt: null, restEndsAt: null })
+			.where(
+				and(
+					eq(workout.id, workoutId),
+					eq(workout.userId, userId),
+					eq(workout.sessionStatus, 'planned')
+				)
+			)
+			.returning();
+
+		if (startedWorkout) return startedWorkout;
+		const [existing] = await db
+			.select()
+			.from(workout)
+			.where(and(eq(workout.id, workoutId), eq(workout.userId, userId)))
+			.limit(1);
+		if (existing?.sessionStatus === 'active') return existing;
+		if (existing?.sessionStatus === 'finished') throw new Error('Reopen this workout first.');
+		throw new Error('Workout not found.');
+	}
+
+	async finishWorkout(userId: string, workoutId: number) {
+		return db.transaction(async (tx) => {
+			const [activeWorkout] = await tx
+				.select()
+				.from(workout)
+				.where(
+					and(
+						eq(workout.id, workoutId),
+						eq(workout.userId, userId),
+						eq(workout.sessionStatus, 'active')
+					)
+				)
+				.limit(1)
+				.for('update');
+			if (!activeWorkout?.startedAt) throw new Error('Active workout not found.');
+
+			const finishedAt = new Date();
+			const durationSeconds = Math.max(
+				0,
+				Math.floor((finishedAt.getTime() - activeWorkout.startedAt.getTime()) / 1000)
+			);
+			const activeSets = await tx
+				.select({ id: set.id })
+				.from(set)
+				.innerJoin(workoutExercise, eq(set.workoutExerciseId, workoutExercise.id))
+				.where(and(eq(workoutExercise.workoutId, workoutId), eq(set.status, 'active')));
+			for (const activeSet of activeSets) {
+				await tx.update(set).set({ status: 'planned' }).where(eq(set.id, activeSet.id));
+			}
+
+			const [finishedWorkout] = await tx
+				.update(workout)
+				.set({
+					sessionStatus: 'finished',
+					finishedAt,
+					durationSeconds,
+					restEndsAt: null
+				})
+				.where(eq(workout.id, workoutId))
+				.returning();
+			return finishedWorkout;
+		});
+	}
+
+	async reopenWorkout(userId: string, workoutId: number) {
+		const [existing] = await db
+			.select({ durationSeconds: workout.durationSeconds })
+			.from(workout)
+			.where(
+				and(
+					eq(workout.id, workoutId),
+					eq(workout.userId, userId),
+					eq(workout.sessionStatus, 'finished')
+				)
+			)
+			.limit(1);
+		if (!existing) throw new Error('Finished workout not found.');
+
+		const startedAt = new Date(Date.now() - (existing.durationSeconds ?? 0) * 1000);
+		const [reopenedWorkout] = await db
+			.update(workout)
+			.set({ sessionStatus: 'active', startedAt, finishedAt: null, restEndsAt: null })
+			.where(and(eq(workout.id, workoutId), eq(workout.userId, userId)))
+			.returning();
+		return reopenedWorkout;
+	}
+
+	async activateSet(userId: string, workoutId: number, setId: number) {
+		return db.transaction(async (tx) => {
+			const [activeWorkout] = await tx
+				.select({ id: workout.id })
+				.from(workout)
+				.where(
+					and(
+						eq(workout.id, workoutId),
+						eq(workout.userId, userId),
+						eq(workout.sessionStatus, 'active')
+					)
+				)
+				.limit(1)
+				.for('update');
+			if (!activeWorkout) throw new Error('Active workout not found.');
+
+			const [targetSet] = await tx
+				.select({ id: set.id, status: set.status })
+				.from(set)
+				.innerJoin(workoutExercise, eq(set.workoutExerciseId, workoutExercise.id))
+				.innerJoin(workout, eq(workoutExercise.workoutId, workout.id))
+				.where(
+					and(
+						eq(set.id, setId),
+						eq(workout.id, workoutId),
+						eq(workout.userId, userId),
+						eq(workout.sessionStatus, 'active')
+					)
+				)
+				.limit(1);
+			if (!targetSet || !['planned', 'skipped', 'active'].includes(targetSet.status))
+				throw new Error('Set is not available.');
+
+			const activeSets = await tx
+				.select({ id: set.id })
+				.from(set)
+				.innerJoin(workoutExercise, eq(set.workoutExerciseId, workoutExercise.id))
+				.where(and(eq(workoutExercise.workoutId, workoutId), eq(set.status, 'active')));
+			for (const activeSet of activeSets) {
+				if (activeSet.id !== setId)
+					await tx.update(set).set({ status: 'planned' }).where(eq(set.id, activeSet.id));
+			}
+			const [activatedSet] = await tx
+				.update(set)
+				.set({ status: 'active', completed: false, completedAt: null })
+				.where(eq(set.id, setId))
+				.returning();
+			return activatedSet;
+		});
+	}
+
+	async completeLiveSet(userId: string, workoutId: number, data: CompleteLiveSetInput) {
+		return db.transaction(async (tx) => {
+			const [activeWorkout] = await tx
+				.select({ id: workout.id })
+				.from(workout)
+				.where(
+					and(
+						eq(workout.id, workoutId),
+						eq(workout.userId, userId),
+						eq(workout.sessionStatus, 'active')
+					)
+				)
+				.limit(1)
+				.for('update');
+			if (!activeWorkout) throw new Error('Active workout not found.');
+
+			const [targetSet] = await tx
+				.select({ id: set.id, restTimeSeconds: set.restTimeSeconds })
+				.from(set)
+				.innerJoin(workoutExercise, eq(set.workoutExerciseId, workoutExercise.id))
+				.innerJoin(workout, eq(workoutExercise.workoutId, workout.id))
+				.where(
+					and(
+						eq(set.id, data.setId),
+						eq(set.status, 'active'),
+						eq(workout.id, workoutId),
+						eq(workout.userId, userId),
+						eq(workout.sessionStatus, 'active')
+					)
+				)
+				.limit(1);
+			if (!targetSet) throw new Error('Active set not found.');
+
+			const completedAt = new Date();
+			const [completedSet] = await tx
+				.update(set)
+				.set({
+					reps: data.reps,
+					weight: data.weight,
+					weightUnit: data.weightUnit,
+					status: 'completed',
+					completed: true,
+					completedAt
+				})
+				.where(eq(set.id, data.setId))
+				.returning();
+			const restEndsAt = targetSet.restTimeSeconds
+				? new Date(completedAt.getTime() + targetSet.restTimeSeconds * 1000)
+				: null;
+			await tx
+				.update(workout)
+				.set({ restEndsAt })
+				.where(and(eq(workout.id, workoutId), eq(workout.userId, userId)));
+			return completedSet;
+		});
+	}
+
+	async skipSet(userId: string, workoutId: number, setId: number) {
+		return db.transaction(async (tx) => {
+			const [activeWorkout] = await tx
+				.select({ id: workout.id })
+				.from(workout)
+				.where(
+					and(
+						eq(workout.id, workoutId),
+						eq(workout.userId, userId),
+						eq(workout.sessionStatus, 'active')
+					)
+				)
+				.limit(1)
+				.for('update');
+			if (!activeWorkout) throw new Error('Active workout not found.');
+
+			const [ownedSet] = await tx
+				.select({ id: set.id })
+				.from(set)
+				.innerJoin(workoutExercise, eq(set.workoutExerciseId, workoutExercise.id))
+				.where(
+					and(
+						eq(set.id, setId),
+						ne(set.status, 'completed'),
+						eq(workoutExercise.workoutId, workoutId)
+					)
+				)
+				.limit(1);
+			if (!ownedSet) throw new Error('Set not found.');
+
+			const [skippedSet] = await tx
+				.update(set)
+				.set({ status: 'skipped', completed: false, completedAt: null })
+				.where(eq(set.id, ownedSet.id))
+				.returning();
+			return skippedSet;
+		});
+	}
+
+	async dismissRest(userId: string, workoutId: number) {
+		const [updatedWorkout] = await db
+			.update(workout)
+			.set({ restEndsAt: null })
+			.where(
+				and(
+					eq(workout.id, workoutId),
+					eq(workout.userId, userId),
+					eq(workout.sessionStatus, 'active')
+				)
+			)
+			.returning({ id: workout.id });
+		if (!updatedWorkout) throw new Error('Active workout not found.');
+	}
+
 	async updateWorkout(
 		userId: string,
 		data: { workoutId: number; name?: string; date: string; notes?: string }
@@ -96,7 +356,13 @@ export class WorkoutService {
 				date: new Date(`${data.date}T12:00:00`),
 				notes: data.notes || null
 			})
-			.where(and(eq(workout.id, data.workoutId), eq(workout.userId, userId)))
+			.where(
+				and(
+					eq(workout.id, data.workoutId),
+					eq(workout.userId, userId),
+					ne(workout.sessionStatus, 'finished')
+				)
+			)
 			.returning({ id: workout.id });
 
 		if (!updatedWorkout) throw new Error('Workout not found.');
@@ -106,7 +372,13 @@ export class WorkoutService {
 	async deleteWorkout(userId: string, workoutId: number) {
 		const [deletedWorkout] = await db
 			.delete(workout)
-			.where(and(eq(workout.id, workoutId), eq(workout.userId, userId)))
+			.where(
+				and(
+					eq(workout.id, workoutId),
+					eq(workout.userId, userId),
+					ne(workout.sessionStatus, 'finished')
+				)
+			)
 			.returning({ id: workout.id });
 
 		if (!deletedWorkout) throw new Error('Workout not found.');
@@ -188,49 +460,47 @@ export class WorkoutService {
 	}
 
 	async addExerciseToWorkout(userId: string, data: AddExerciseToWorkoutInput) {
-		const [ownedWorkout, existingExercise] = await Promise.all([
-			db
-				.select({ id: workout.id })
+		return db.transaction(async (tx) => {
+			const [ownedWorkout] = await tx
+				.select({ id: workout.id, sessionStatus: workout.sessionStatus })
 				.from(workout)
 				.where(and(eq(workout.id, data.workoutId), eq(workout.userId, userId)))
-				.limit(1),
-			db.select({ id: exercise.id }).from(exercise).where(eq(exercise.id, data.exerciseId)).limit(1)
-		]);
+				.limit(1)
+				.for('update');
+			if (!ownedWorkout || ownedWorkout.sessionStatus === 'finished')
+				throw new Error('Workout not found.');
 
-		if (!ownedWorkout[0]) {
-			throw new Error('Workout not found.');
-		}
+			const [existingExercise] = await tx
+				.select({ id: exercise.id })
+				.from(exercise)
+				.where(eq(exercise.id, data.exerciseId))
+				.limit(1);
+			if (!existingExercise) throw new Error('Exercise not found.');
 
-		if (!existingExercise[0]) {
-			throw new Error('Exercise not found.');
-		}
-
-		const [createdWorkoutExercise] = await db
-			.insert(workoutExercise)
-			.values({
-				workoutId: data.workoutId,
-				exerciseId: data.exerciseId,
-				order: data.order,
-				notes: data.notes
-			})
-			.returning();
-
-		if (!createdWorkoutExercise) {
-			throw new Error('Failed to add exercise.');
-		}
-
-		return createdWorkoutExercise;
+			const [createdWorkoutExercise] = await tx
+				.insert(workoutExercise)
+				.values({
+					workoutId: data.workoutId,
+					exerciseId: data.exerciseId,
+					order: data.order,
+					notes: data.notes
+				})
+				.returning();
+			if (!createdWorkoutExercise) throw new Error('Failed to add exercise.');
+			return createdWorkoutExercise;
+		});
 	}
 
 	async createExerciseForWorkout(userId: string, data: CreateExerciseForWorkoutInput) {
 		return db.transaction(async (tx) => {
 			const [ownedWorkout] = await tx
-				.select({ id: workout.id })
+				.select({ id: workout.id, sessionStatus: workout.sessionStatus })
 				.from(workout)
 				.where(and(eq(workout.id, data.workoutId), eq(workout.userId, userId)))
-				.limit(1);
+				.limit(1)
+				.for('update');
 
-			if (!ownedWorkout) {
+			if (!ownedWorkout || ownedWorkout.sessionStatus === 'finished') {
 				throw new Error('Workout not found.');
 			}
 
@@ -265,41 +535,40 @@ export class WorkoutService {
 	}
 
 	async addSetToWorkoutExercise(userId: string, data: AddSetToWorkoutExerciseInput) {
-		const [ownedWorkoutExercise] = await db
-			.select({ id: workoutExercise.id })
-			.from(workoutExercise)
-			.innerJoin(workout, eq(workoutExercise.workoutId, workout.id))
-			.where(and(eq(workoutExercise.id, data.workoutExerciseId), eq(workout.userId, userId)))
-			.limit(1);
+		return db.transaction(async (tx) => {
+			const [ownedWorkoutExercise] = await tx
+				.select({ id: workoutExercise.id, sessionStatus: workout.sessionStatus })
+				.from(workoutExercise)
+				.innerJoin(workout, eq(workoutExercise.workoutId, workout.id))
+				.where(and(eq(workoutExercise.id, data.workoutExerciseId), eq(workout.userId, userId)))
+				.limit(1)
+				.for('update');
+			if (!ownedWorkoutExercise || ownedWorkoutExercise.sessionStatus === 'finished')
+				throw new Error('Exercise entry not found.');
 
-		if (!ownedWorkoutExercise) {
-			throw new Error('Exercise entry not found.');
-		}
-
-		const [createdSet] = await db
-			.insert(set)
-			.values({
-				workoutExerciseId: data.workoutExerciseId,
-				setNumber: data.setNumber,
-				reps: data.reps,
-				weight: data.weight,
-				weightUnit: data.weightUnit || 'kg',
-				restTimeSeconds: data.restTimeSeconds,
-				completed: data.completed ?? true
-			})
-			.returning();
-
-		if (!createdSet) {
-			throw new Error('Failed to add set.');
-		}
-
-		return createdSet;
+			const [createdSet] = await tx
+				.insert(set)
+				.values({
+					workoutExerciseId: data.workoutExerciseId,
+					setNumber: data.setNumber,
+					reps: data.reps,
+					weight: data.weight,
+					weightUnit: data.weightUnit || 'kg',
+					restTimeSeconds: data.restTimeSeconds,
+					completed: data.completed ?? true,
+					status: (data.completed ?? true) ? 'completed' : 'planned',
+					completedAt: (data.completed ?? true) ? new Date() : null
+				})
+				.returning();
+			if (!createdSet) throw new Error('Failed to add set.');
+			return createdSet;
+		});
 	}
 
 	async updateSet(userId: string, data: UpdateSetInput) {
 		return db.transaction(async (tx) => {
 			const [ownedSet] = await tx
-				.select({ id: set.id })
+				.select({ id: set.id, sessionStatus: workout.sessionStatus })
 				.from(set)
 				.innerJoin(workoutExercise, eq(set.workoutExerciseId, workoutExercise.id))
 				.innerJoin(workout, eq(workoutExercise.workoutId, workout.id))
@@ -310,9 +579,10 @@ export class WorkoutService {
 						eq(workout.userId, userId)
 					)
 				)
-				.limit(1);
+				.limit(1)
+				.for('update');
 
-			if (!ownedSet) throw new Error('Set not found.');
+			if (!ownedSet || ownedSet.sessionStatus === 'finished') throw new Error('Set not found.');
 
 			const existingSets = await tx
 				.select({ id: set.id })
@@ -331,7 +601,9 @@ export class WorkoutService {
 					weight: data.weight,
 					weightUnit: data.weightUnit || 'kg',
 					restTimeSeconds: data.restTimeSeconds,
-					completed: data.completed ?? true
+					completed: data.completed ?? true,
+					status: (data.completed ?? true) ? 'completed' : 'planned',
+					completedAt: (data.completed ?? true) ? new Date() : null
 				})
 				.where(eq(set.id, data.setId))
 				.returning();
@@ -350,14 +622,19 @@ export class WorkoutService {
 	async deleteSet(userId: string, setId: number) {
 		return db.transaction(async (tx) => {
 			const [ownedSet] = await tx
-				.select({ id: set.id, workoutExerciseId: set.workoutExerciseId })
+				.select({
+					id: set.id,
+					workoutExerciseId: set.workoutExerciseId,
+					sessionStatus: workout.sessionStatus
+				})
 				.from(set)
 				.innerJoin(workoutExercise, eq(set.workoutExerciseId, workoutExercise.id))
 				.innerJoin(workout, eq(workoutExercise.workoutId, workout.id))
 				.where(and(eq(set.id, setId), eq(workout.userId, userId)))
-				.limit(1);
+				.limit(1)
+				.for('update');
 
-			if (!ownedSet) throw new Error('Set not found.');
+			if (!ownedSet || ownedSet.sessionStatus === 'finished') throw new Error('Set not found.');
 			await tx.delete(set).where(eq(set.id, setId));
 
 			const remainingSets = await tx
@@ -378,13 +655,19 @@ export class WorkoutService {
 	async removeExerciseFromWorkout(userId: string, workoutExerciseId: number) {
 		return db.transaction(async (tx) => {
 			const [ownedEntry] = await tx
-				.select({ id: workoutExercise.id, workoutId: workoutExercise.workoutId })
+				.select({
+					id: workoutExercise.id,
+					workoutId: workoutExercise.workoutId,
+					sessionStatus: workout.sessionStatus
+				})
 				.from(workoutExercise)
 				.innerJoin(workout, eq(workoutExercise.workoutId, workout.id))
 				.where(and(eq(workoutExercise.id, workoutExerciseId), eq(workout.userId, userId)))
-				.limit(1);
+				.limit(1)
+				.for('update');
 
-			if (!ownedEntry) throw new Error('Exercise entry not found.');
+			if (!ownedEntry || ownedEntry.sessionStatus === 'finished')
+				throw new Error('Exercise entry not found.');
 			await tx.delete(workoutExercise).where(eq(workoutExercise.id, workoutExerciseId));
 
 			const remainingExercises = await tx
