@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { elapsedSeconds, formatDuration, remainingRestSeconds } from '$lib/live-workout';
+	import { activeDurationSeconds, formatDuration, remainingRestSeconds } from '$lib/live-workout';
 	import { onMount } from 'svelte';
 
 	let { data, form } = $props();
@@ -11,7 +11,7 @@
 	const elapsed = $derived(
 		data.workout.sessionStatus === 'finished'
 			? (data.workout.durationSeconds ?? 0)
-			: elapsedSeconds(data.workout.startedAt, now)
+			: activeDurationSeconds(data.workout.durationSeconds, data.workout.activeStartedAt, now)
 	);
 	const restRemaining = $derived(remainingRestSeconds(data.workout.restEndsAt, now));
 	const completedCount = $derived(
@@ -95,15 +95,19 @@
 		</section>
 	{:else if data.workout.sessionStatus === 'finished'}
 		<section class="start-card surface">
-			<p class="eyebrow">Workout finished</p>
+			<p class="eyebrow">Training Session finished</p>
 			<h2>Session locked.</h2>
 			<p>
 				Finished in {formatDuration(data.workout.durationSeconds ?? 0)} with {completedCount} completed
 				sets.
 			</p>
+			<p>
+				{data.workout.trainingSegments.length}
+				{data.workout.trainingSegments.length === 1 ? 'Training Segment' : 'Training Segments'}
+			</p>
 			<form method="POST" action="?/reopen" use:enhance>
 				<input type="hidden" name="workoutId" value={data.workout.id} />
-				<button type="submit" class="button-secondary">Reopen workout</button>
+				<button type="submit" class="button-secondary">Reopen Training Session</button>
 			</form>
 		</section>
 	{:else}
@@ -123,11 +127,21 @@
 								<div class="set-summary">
 									<span class="set-number">{exerciseSet.setNumber}</span>
 									<div>
-										<strong>{exerciseSet.reps} reps</strong><small
-											>{exerciseSet.weight !== null
+										<strong
+											>Set Target {exerciseSet.reps} reps · {exerciseSet.weight !== null
 												? `${exerciseSet.weight} ${exerciseSet.weightUnit}`
-												: 'Bodyweight'} · {exerciseSet.restTimeSeconds ?? 0}s rest</small
+												: 'Bodyweight'}</strong
 										>
+										{#if exerciseSet.status === 'completed' && exerciseSet.actualReps !== null}
+											<small
+												>Set Result {exerciseSet.actualReps} reps · {exerciseSet.actualWeight !==
+												null
+													? `${exerciseSet.actualWeight} ${exerciseSet.actualWeightUnit}`
+													: 'Bodyweight'}</small
+											>
+										{:else}
+											<small>{exerciseSet.restTimeSeconds ?? 0}s rest</small>
+										{/if}
 									</div>
 									<span class="status-pill">{exerciseSet.status}</span>
 								</div>
@@ -135,7 +149,7 @@
 									<form method="POST" action="?/completeSet" use:enhance class="actual-form">
 										<input type="hidden" name="setId" value={exerciseSet.id} />
 										<label
-											>Actual reps<input
+											>Set Result reps<input
 												name="reps"
 												type="number"
 												min="0"
@@ -144,7 +158,7 @@
 											/></label
 										>
 										<label
-											>Actual load<input
+											>Set Result load<input
 												name="weight"
 												type="number"
 												min="0"

@@ -11,6 +11,7 @@
 	});
 
 	const workoutDate = $derived(new Date(data.workout.date).toISOString().slice(0, 10));
+	const historyLocked = $derived(data.workout.finishedAt !== null);
 
 	function confirmSubmission(event: SubmitEvent, message: string) {
 		if (!window.confirm(message)) event.preventDefault();
@@ -78,9 +79,14 @@
 		</div>
 	</section>
 
-	{#if data.workout.sessionStatus === 'active'}
+	{#if historyLocked}
+		<p class="status-message">
+			This Training Session has historical results. Its Workout Prescription and Set Results are
+			locked; reopening only appends active time.
+		</p>
+	{:else if data.workout.sessionStatus === 'active'}
 		<p class="status-message !border-[#3ee8cf]/25 !bg-[#3ee8cf]/8 !text-[#6ff5df]">
-			This workout is live. You can leave this page and resume without losing the session timer.
+			This Training Session is active. You can leave this page and resume without losing its timer.
 		</p>
 	{:else if data.workout.sessionStatus === 'finished'}
 		<p class="status-message">
@@ -88,7 +94,7 @@
 		</p>
 	{/if}
 
-	<details class="surface group overflow-hidden">
+	<details class="surface group overflow-hidden" hidden={historyLocked}>
 		<summary
 			class="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 font-bold text-white sm:px-7"
 		>
@@ -217,6 +223,7 @@
 							method="POST"
 							action="?/removeExercise"
 							use:enhance
+							hidden={historyLocked}
 							onsubmit={(event) =>
 								confirmSubmission(
 									event,
@@ -239,8 +246,8 @@
 								<thead
 									class="bg-white/[0.025] text-[0.64rem] font-extrabold uppercase tracking-[0.13em] text-[#6d8177]"
 									><tr
-										><th class="px-4 py-3">Set</th><th class="px-4 py-3">Reps</th><th
-											class="px-4 py-3">Load</th
+										><th class="px-4 py-3">Set</th><th class="px-4 py-3">Set Target</th><th
+											class="px-4 py-3">Set Result</th
 										><th class="px-4 py-3">Rest</th><th class="px-4 py-3">Status</th><th
 											class="px-4 py-3">Actions</th
 										></tr
@@ -251,10 +258,14 @@
 										<tr class="transition hover:bg-white/[0.018]"
 											><td class="px-4 py-3.5 font-black text-[#c8ff3d]"
 												>#{exerciseSet.setNumber}</td
-											><td class="px-4 py-3.5 font-bold text-white">{exerciseSet.reps}</td><td
-												class="px-4 py-3.5 text-[#b1c0b8]"
-												>{exerciseSet.weight ?? '—'}
-												{exerciseSet.weight !== null ? exerciseSet.weightUnit : ''}</td
+											><td class="px-4 py-3.5 font-bold text-white"
+												>Set Target: {exerciseSet.reps} reps · {exerciseSet.weight !== null
+													? `${exerciseSet.weight} ${exerciseSet.weightUnit}`
+													: 'Bodyweight'}</td
+											><td class="px-4 py-3.5 text-[#b1c0b8]"
+												>{exerciseSet.actualReps !== null
+													? `Set Result: ${exerciseSet.actualReps} reps · ${exerciseSet.actualWeight !== null ? `${exerciseSet.actualWeight} ${exerciseSet.actualWeightUnit}` : 'Bodyweight'}`
+													: 'Set Result: —'}</td
 											><td class="px-4 py-3.5 text-[#82958c]"
 												>{exerciseSet.restTimeSeconds ? `${exerciseSet.restTimeSeconds}s` : '—'}</td
 											><td class="px-4 py-3.5"
@@ -264,7 +275,7 @@
 												></td
 											>
 											<td class="px-4 py-3.5"
-												><details class="group">
+												><details class="group" hidden={historyLocked}>
 													<summary
 														class="cursor-pointer list-none text-xs font-bold text-[#3ee8cf] hover:text-[#6ff5df]"
 														>Edit</summary
@@ -381,7 +392,9 @@
 															>
 														</form>
 													</div>
-												</details></td
+												</details>
+												{#if historyLocked}<span class="text-xs text-[#71847a]">Locked</span
+													>{/if}</td
 											></tr
 										>
 									{/each}
@@ -396,6 +409,7 @@
 						method="POST"
 						action="?/addSet"
 						use:enhance
+						hidden={historyLocked}
 						class="mt-5 grid gap-3 rounded-xl border border-[#c8ff3d]/10 bg-[#c8ff3d]/[0.025] p-4 sm:grid-cols-2 lg:grid-cols-6 lg:items-end"
 					>
 						<input type="hidden" name="workoutExerciseId" value={workoutExercise.id} />
@@ -486,7 +500,7 @@
 		{/each}
 	</section>
 
-	<section>
+	<section hidden={historyLocked}>
 		<div class="mb-5">
 			<p class="eyebrow">Add movement</p>
 			<h2 class="mt-2 text-2xl font-black tracking-tight text-white">Grow the session</h2>

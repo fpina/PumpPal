@@ -3,6 +3,14 @@ export function elapsedSeconds(startedAt: Date | string | null, now = Date.now()
 	return Math.max(0, Math.floor((now - new Date(startedAt).getTime()) / 1000));
 }
 
+export function activeDurationSeconds(
+	accumulatedSeconds: number | null,
+	activeStartedAt: Date | string | null,
+	now = Date.now()
+) {
+	return Math.max(0, accumulatedSeconds ?? 0) + elapsedSeconds(activeStartedAt, now);
+}
+
 export function remainingRestSeconds(restEndsAt: Date | string | null, now = Date.now()) {
 	if (!restEndsAt) return 0;
 	return Math.max(0, Math.ceil((new Date(restEndsAt).getTime() - now) / 1000));

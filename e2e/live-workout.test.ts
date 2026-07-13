@@ -18,7 +18,7 @@ async function register(page: Page, suffix: string) {
 	await expect(page).toHaveURL('/');
 }
 
-test('an athlete can run, resume, finish, and reopen a live workout', async ({ page }) => {
+test('an Athlete can run, resume, finish, and reopen a Training Session', async ({ page }) => {
 	test.setTimeout(60_000);
 	const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 	await register(page, suffix);
@@ -55,18 +55,18 @@ test('an athlete can run, resume, finish, and reopen a live workout', async ({ p
 
 	const firstSet = page.locator('.live-set').first();
 	await firstSet.getByRole('button', { name: 'Start set' }).click();
-	await firstSet.getByLabel('Actual reps').fill('9');
-	await firstSet.getByLabel('Actual load').fill('102.5');
+	await firstSet.getByLabel('Set Result reps').fill('9');
+	await firstSet.getByLabel('Set Result load').fill('102.5');
 	await firstSet.getByRole('button', { name: 'Complete set' }).click();
 	await expect(page.getByText('1 / 2 sets complete')).toBeVisible();
 	await expect(page.getByText('Rest timer')).toBeVisible();
 
 	await page.reload();
 	await expect(page.getByText('1 / 2 sets complete')).toBeVisible();
-	await expect(firstSet.getByText('9 reps')).toBeVisible();
-	await expect(firstSet.getByText(/102\.5 kg/)).toBeVisible();
+	await expect(firstSet.getByText('Set Target 8 reps · 100 kg')).toBeVisible();
+	await expect(firstSet.getByText('Set Result 9 reps · 102.5 kg')).toBeVisible();
 	await expect(page.getByText(/Rest (timer|complete)/)).toBeVisible();
-	await expect(page.getByText('Rest complete')).toBeVisible({ timeout: 5_000 });
+	await expect(page.getByText('Rest complete', { exact: true })).toBeVisible({ timeout: 5_000 });
 
 	const secondSet = page.locator('.live-set').nth(1);
 	await secondSet.getByRole('button', { name: 'Skip' }).click();
@@ -78,6 +78,7 @@ test('an athlete can run, resume, finish, and reopen a live workout', async ({ p
 	page.once('dialog', (dialog) => dialog.accept());
 	await page.getByRole('button', { name: 'Finish workout' }).click();
 	await expect(page.getByRole('heading', { name: 'Session locked.' })).toBeVisible();
+	await expect(page.getByText('1 Training Segment')).toBeVisible();
 
 	const actionHeaders = {
 		accept: 'application/json',
@@ -100,8 +101,22 @@ test('an athlete can run, resume, finish, and reopen a live workout', async ({ p
 	});
 	expect(await lockedDelete.json()).toMatchObject({ type: 'failure', status: 404 });
 
-	await page.getByRole('button', { name: 'Reopen workout' }).click();
+	await page.getByRole('button', { name: 'Reopen Training Session' }).click();
 	await expect(page.getByRole('button', { name: 'Finish workout' })).toBeVisible();
+	await expect(
+		page.locator('.live-set').first().getByText('Set Result 9 reps · 102.5 kg')
+	).toBeVisible();
+	await expect(
+		page.locator('.live-set').first().getByRole('button', { name: 'Start set' })
+	).toHaveCount(0);
+	page.once('dialog', (dialog) => dialog.accept());
+	await page.getByRole('button', { name: 'Finish workout' }).click();
+	await expect(page.getByText('2 Training Segments')).toBeVisible();
 	await page.goto(detailUrl);
-	await expect(page.getByRole('link', { name: 'Resume workout' })).toBeVisible();
+	await expect(page.getByText('Set Target: 8 reps · 100 kg')).toBeVisible();
+	await expect(page.getByText('Set Result: 9 reps · 102.5 kg')).toBeVisible();
+
+	await page.getByRole('button', { name: 'Repeat workout' }).click();
+	await expect(page.getByText('Set Target: 8 reps · 100 kg')).toBeVisible();
+	await expect(page.getByText('Set Result: —')).toBeVisible();
 });

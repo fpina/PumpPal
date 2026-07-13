@@ -51,7 +51,7 @@ test('an athlete can repeat populated and empty workouts without duplicating sub
 	await sourceExercise.getByLabel('Weight').fill('70');
 	await sourceExercise.getByLabel('Rest').fill('90');
 	await sourceExercise.getByRole('button', { name: 'Add set' }).click();
-	await expect(sourceExercise.getByText('70 kg')).toBeVisible();
+	await expect(sourceExercise.getByText('Set Target: 8 reps · 70 kg')).toBeVisible();
 
 	const repeatForm = page.getByRole('button', { name: 'Repeat workout' }).locator('..');
 	const workoutId = await repeatForm.locator('input[name="workoutId"]').inputValue();
@@ -80,7 +80,7 @@ test('an athlete can repeat populated and empty workouts without duplicating sub
 	await expect(page.getByText('Three-second lowering phase')).toBeVisible();
 	await expect(page.locator('article h3')).toHaveText([warmupName, exerciseName, exerciseName]);
 	await expect(page.getByText('Planned', { exact: true })).toBeVisible();
-	await expect(page.getByText('70 kg')).toBeVisible();
+	await expect(page.getByText('Set Target: 8 reps · 70 kg')).toBeVisible();
 
 	const repeatedExercise = page.locator('article').nth(2);
 	await repeatedExercise.getByText('Edit', { exact: true }).click();
@@ -90,11 +90,11 @@ test('an athlete can repeat populated and empty workouts without duplicating sub
 	await editForm.getByLabel('Completed').check();
 	await editForm.getByRole('button', { name: 'Save set' }).click();
 	await expect(repeatedExercise.getByText('Complete', { exact: true })).toBeVisible();
-	await expect(repeatedExercise.getByText('9', { exact: true })).toBeVisible();
+	await expect(repeatedExercise.getByText('Set Target: 9 reps · 70 kg')).toBeVisible();
 
 	await page.goto(sourceUrl);
 	const unchangedSourceExercise = page.locator('article').nth(2);
-	await expect(unchangedSourceExercise.getByText('8', { exact: true })).toBeVisible();
+	await expect(unchangedSourceExercise.getByText('Set Target: 8 reps · 70 kg')).toBeVisible();
 	await expect(unchangedSourceExercise.getByText('Complete', { exact: true })).toBeVisible();
 
 	await page.goto('/');

@@ -108,6 +108,7 @@ export const workout = pgTable(
 			.default('planned')
 			.notNull(),
 		startedAt: timestamp('started_at'),
+		activeStartedAt: timestamp('active_started_at'),
 		finishedAt: timestamp('finished_at'),
 		durationSeconds: integer('duration_seconds'),
 		restEndsAt: timestamp('rest_ends_at'),
@@ -118,6 +119,10 @@ export const workout = pgTable(
 		check(
 			'workout_session_status_check',
 			sql`${table.sessionStatus} in ('planned', 'active', 'finished')`
+		),
+		check(
+			'workout_active_started_at_check',
+			sql`(${table.sessionStatus} = 'active') = (${table.activeStartedAt} is not null)`
 		)
 	]
 );
@@ -127,7 +132,8 @@ export const workoutsRelations = relations(workout, ({ one, many }) => ({
 		fields: [workout.userId],
 		references: [user.id]
 	}),
-	workoutExercises: many(workoutExercise)
+	workoutExercises: many(workoutExercise),
+	trainingSegments: many(trainingSegment)
 }));
 
 export type Workout = typeof workout.$inferSelect;
@@ -172,6 +178,9 @@ export const set = pgTable(
 		reps: integer('reps').notNull(),
 		weight: numeric('weight', { precision: 8, scale: 2, mode: 'number' }),
 		weightUnit: varchar('weight_unit', { length: 10 }).default('kg'), // e.g., 'kg', 'lbs'
+		actualReps: integer('actual_reps'),
+		actualWeight: numeric('actual_weight', { precision: 8, scale: 2, mode: 'number' }),
+		actualWeightUnit: varchar('actual_weight_unit', { length: 10 }),
 		restTimeSeconds: integer('rest_time_seconds'), // Optional rest time after the set
 		completed: boolean('completed').default(true).notNull(), // Mark if the set was actually done
 		status: varchar('status', { length: 20 })
@@ -186,7 +195,11 @@ export const set = pgTable(
 			'set_status_check',
 			sql`${table.status} in ('planned', 'active', 'completed', 'skipped')`
 		),
-		check('set_completion_status_check', sql`${table.completed} = (${table.status} = 'completed')`)
+		check('set_completion_status_check', sql`${table.completed} = (${table.status} = 'completed')`),
+		check(
+			'set_result_status_check',
+			sql`(${table.status} = 'completed') = (${table.actualReps} is not null)`
+		)
 	]
 );
 
@@ -198,3 +211,34 @@ export const setsRelations = relations(set, ({ one }) => ({
 }));
 
 export type Set = typeof set.$inferSelect;
+
+// --- Training Segments ---
+// One continuous timed interval inside a Training Session
+export const trainingSegment = pgTable(
+	'training_segment',
+	{
+		id: serial('id').primaryKey(),
+		workoutId: integer('workout_id')
+			.notNull()
+			.references(() => workout.id, { onDelete: 'cascade' }),
+		startedAt: timestamp('started_at').notNull(),
+		finishedAt: timestamp('finished_at'),
+		durationSeconds: integer('duration_seconds'),
+		createdAt: timestamp('created_at').defaultNow().notNull()
+	},
+	(table) => [
+		check(
+			'training_segment_completion_check',
+			sql`(${table.finishedAt} is null and ${table.durationSeconds} is null) or (${table.finishedAt} is not null and ${table.durationSeconds} >= 0 and ${table.finishedAt} >= ${table.startedAt})`
+		)
+	]
+);
+
+export const trainingSegmentsRelations = relations(trainingSegment, ({ one }) => ({
+	workout: one(workout, {
+		fields: [trainingSegment.workoutId],
+		references: [workout.id]
+	})
+}));
+
+export type TrainingSegment = typeof trainingSegment.$inferSelect;
