@@ -1,6 +1,9 @@
 import { db } from '$lib/server/db';
 import { exercise, set, workout, workoutExercise } from '$lib/server/db/schema';
-import type { CreateWorkoutSchemaType } from '$lib/types/workout.validation';
+import type {
+	CreateWorkoutSchemaType,
+	RepeatWorkoutSchemaType
+} from '$lib/types/workout.validation';
 import { and, asc, desc, eq } from 'drizzle-orm';
 
 interface AddExerciseToWorkoutInput {
@@ -107,6 +110,81 @@ export class WorkoutService {
 			.returning({ id: workout.id });
 
 		if (!deletedWorkout) throw new Error('Workout not found.');
+	}
+
+	async repeatWorkout(userId: string, data: RepeatWorkoutSchemaType) {
+		return db.transaction(async (tx) => {
+			const sourceWorkout = await tx.query.workout.findFirst({
+				where: and(eq(workout.id, data.workoutId), eq(workout.userId, userId)),
+				with: {
+					workoutExercises: {
+						with: {
+							sets: {
+								orderBy: (sets, { asc }) => [asc(sets.setNumber)]
+							}
+						},
+						orderBy: (workoutExercises, { asc }) => [asc(workoutExercises.order)]
+					}
+				}
+			});
+
+			if (!sourceWorkout) throw new Error('Workout not found.');
+			const now = new Date();
+			const todayAtNoonUtc = new Date(
+				Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12)
+			);
+
+			const [createdWorkout] = await tx
+				.insert(workout)
+				.values({
+					userId,
+					name: sourceWorkout.name,
+					date: todayAtNoonUtc,
+					notes: sourceWorkout.notes,
+					repeatToken: data.repeatToken
+				})
+				.onConflictDoNothing({ target: workout.repeatToken })
+				.returning({ id: workout.id });
+
+			if (!createdWorkout) {
+				const [existingWorkout] = await tx
+					.select({ id: workout.id })
+					.from(workout)
+					.where(and(eq(workout.repeatToken, data.repeatToken), eq(workout.userId, userId)))
+					.limit(1);
+				if (!existingWorkout) throw new Error('Repeat request already used.');
+				return existingWorkout;
+			}
+
+			for (const sourceExercise of sourceWorkout.workoutExercises) {
+				const [createdExercise] = await tx
+					.insert(workoutExercise)
+					.values({
+						workoutId: createdWorkout.id,
+						exerciseId: sourceExercise.exerciseId,
+						order: sourceExercise.order,
+						notes: sourceExercise.notes
+					})
+					.returning({ id: workoutExercise.id });
+
+				if (!createdExercise) throw new Error('Failed to copy exercise.');
+				if (sourceExercise.sets.length > 0) {
+					await tx.insert(set).values(
+						sourceExercise.sets.map((sourceSet) => ({
+							workoutExerciseId: createdExercise.id,
+							setNumber: sourceSet.setNumber,
+							reps: sourceSet.reps,
+							weight: sourceSet.weight,
+							weightUnit: sourceSet.weightUnit,
+							restTimeSeconds: sourceSet.restTimeSeconds,
+							completed: false
+						}))
+					);
+				}
+			}
+
+			return createdWorkout;
+		});
 	}
 
 	async addExerciseToWorkout(userId: string, data: AddExerciseToWorkoutInput) {

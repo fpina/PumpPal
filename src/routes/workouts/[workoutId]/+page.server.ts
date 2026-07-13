@@ -3,6 +3,7 @@ import {
 	addExerciseSchema,
 	addSetSchema,
 	createExerciseSchema,
+	repeatWorkoutSchema,
 	setMutationSchema,
 	updateSetSchema,
 	updateWorkoutSchema,
@@ -10,6 +11,7 @@ import {
 	workoutMutationSchema
 } from '$lib/types/workout.validation';
 import { error, fail, redirect } from '@sveltejs/kit';
+import { randomUUID } from 'node:crypto';
 import type { Actions, PageServerLoad } from './$types';
 
 function parseWorkoutId(value: string) {
@@ -36,10 +38,45 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		throw error(404, 'Workout not found.');
 	}
 
-	return { workout, availableExercises };
+	return { workout, availableExercises, repeatToken: randomUUID() };
 };
 
 export const actions: Actions = {
+	repeatWorkout: async ({ request, locals, params }) => {
+		if (!locals.user) throw redirect(302, '/auth');
+		const routeWorkoutId = parseWorkoutId(params.workoutId);
+		const formData = await request.formData();
+		const values = {
+			workoutId: String(formData.get('workoutId') ?? ''),
+			repeatToken: String(formData.get('repeatToken') ?? '')
+		};
+		const result = repeatWorkoutSchema.safeParse(values);
+
+		if (!result.success || result.data.workoutId !== routeWorkoutId) {
+			return fail(400, {
+				intent: 'repeatWorkout' as const,
+				success: false,
+				message: 'Could not repeat this workout.',
+				errors: result.success ? {} : result.error.flatten().fieldErrors,
+				values
+			});
+		}
+
+		let repeatedWorkout;
+		try {
+			repeatedWorkout = await workoutService.repeatWorkout(locals.user.id, result.data);
+		} catch (cause) {
+			console.error('Failed to repeat workout:', cause);
+			return fail(404, {
+				intent: 'repeatWorkout' as const,
+				success: false,
+				message: 'Workout not found.',
+				errors: {},
+				values
+			});
+		}
+		throw redirect(303, `/workouts/${repeatedWorkout.id}`);
+	},
 	updateWorkout: async ({ request, locals, params }) => {
 		if (!locals.user) throw redirect(302, '/auth');
 		const routeWorkoutId = parseWorkoutId(params.workoutId);

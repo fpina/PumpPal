@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 
 	let { data, form } = $props();
+	let repeating = $state(false);
 
 	const dateFormatter = new Intl.DateTimeFormat(undefined, {
 		year: 'numeric',
@@ -30,20 +31,39 @@
 						{data.workout.notes}
 					</p>{/if}
 			</div>
-			<div class="flex flex-wrap gap-7">
-				<div class="metric">
-					<strong>{data.workout.workoutExercises.length}</strong><span
-						>{data.workout.workoutExercises.length === 1 ? 'Exercise' : 'Exercises'}</span
-					>
+			<div class="flex flex-col items-start gap-5 lg:items-end">
+				<div class="flex flex-wrap gap-7">
+					<div class="metric">
+						<strong>{data.workout.workoutExercises.length}</strong><span
+							>{data.workout.workoutExercises.length === 1 ? 'Exercise' : 'Exercises'}</span
+						>
+					</div>
+					<div class="metric !border-[#3ee8cf]">
+						<strong
+							>{data.workout.workoutExercises.reduce(
+								(count, entry) => count + entry.sets.length,
+								0
+							)}</strong
+						><span>Total sets</span>
+					</div>
 				</div>
-				<div class="metric !border-[#3ee8cf]">
-					<strong
-						>{data.workout.workoutExercises.reduce(
-							(count, entry) => count + entry.sets.length,
-							0
-						)}</strong
-					><span>Total sets</span>
-				</div>
+				<form
+					method="POST"
+					action="?/repeatWorkout"
+					use:enhance={() => {
+						repeating = true;
+						return async ({ update }) => {
+							await update();
+							repeating = false;
+						};
+					}}
+				>
+					<input type="hidden" name="workoutId" value={data.workout.id} />
+					<input type="hidden" name="repeatToken" value={data.repeatToken} />
+					<button type="submit" disabled={repeating} class="button-primary min-w-44">
+						{repeating ? 'Building workout…' : 'Repeat workout'}
+					</button>
+				</form>
 			</div>
 		</div>
 	</section>

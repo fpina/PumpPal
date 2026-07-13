@@ -71,5 +71,11 @@ export const workoutMutationSchema = z.object({
 	workoutId: z.coerce.number().int().positive('Workout is required.')
 });
 
+export const repeatWorkoutSchema = workoutMutationSchema.extend({
+	repeatToken: z.string().uuid('Repeat request is invalid.')
+});
+
+export type RepeatWorkoutSchemaType = z.infer<typeof repeatWorkoutSchema>;
+
 export type CreateWorkoutSchema = typeof createWorkoutSchema;
 export type CreateWorkoutSchemaType = z.infer<CreateWorkoutSchema>;

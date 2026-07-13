@@ -6,7 +6,8 @@ import {
 	numeric,
 	timestamp,
 	boolean,
-	varchar
+	varchar,
+	uniqueIndex
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
@@ -87,16 +88,21 @@ export const exercisesRelations = relations(exercise, ({ many }) => ({
 export type Exercise = typeof exercise.$inferSelect;
 // --- Workouts ---
 // Represents a single workout session for a user
-export const workout = pgTable('workout', {
-	id: serial('id').primaryKey(),
-	userId: text('user_id')
-		.notNull()
-		.references(() => user.id, { onDelete: 'cascade' }), // Link to the user
-	name: varchar('name', { length: 255 }), // Optional name like "Monday Chest Day"
-	date: timestamp('date').notNull(), // When the workout occurred
-	notes: text('notes'), // General notes for the workout session
-	createdAt: timestamp('created_at').defaultNow().notNull()
-});
+export const workout = pgTable(
+	'workout',
+	{
+		id: serial('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }), // Link to the user
+		name: varchar('name', { length: 255 }), // Optional name like "Monday Chest Day"
+		date: timestamp('date').notNull(), // When the workout occurred
+		notes: text('notes'), // General notes for the workout session
+		repeatToken: text('repeat_token'),
+		createdAt: timestamp('created_at').defaultNow().notNull()
+	},
+	(table) => [uniqueIndex('workout_repeat_token_unique').on(table.repeatToken)]
+);
 
 export const workoutsRelations = relations(workout, ({ one, many }) => ({
 	user: one(user, {

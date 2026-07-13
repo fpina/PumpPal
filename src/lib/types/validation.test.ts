@@ -3,6 +3,7 @@ import { loginSchema, registerSchema } from './register.validation';
 import {
 	addSetSchema,
 	createWorkoutSchema,
+	repeatWorkoutSchema,
 	setMutationSchema,
 	updateSetSchema,
 	updateWorkoutSchema,
@@ -106,6 +107,21 @@ describe('workout validation', () => {
 				weightUnit: 'stone',
 				restTimeSeconds: '-5',
 				completed: 'on'
+			}).success
+		);
+	});
+
+	it('validates idempotent repeat-workout requests', () => {
+		assert.isTrue(
+			repeatWorkoutSchema.safeParse({
+				workoutId: '4',
+				repeatToken: '9f1c83c6-0c20-4ad8-b5df-8ec982cfe0e8'
+			}).success
+		);
+		assert.isFalse(
+			repeatWorkoutSchema.safeParse({
+				workoutId: '4',
+				repeatToken: 'reused-token'
 			}).success
 		);
 	});
