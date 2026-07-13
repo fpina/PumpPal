@@ -28,6 +28,10 @@ interface AddSetToWorkoutExerciseInput {
 	completed?: boolean;
 }
 
+interface UpdateSetInput extends AddSetToWorkoutExerciseInput {
+	setId: number;
+}
+
 export class WorkoutService {
 	async createWorkout(userId: string, workoutData: CreateWorkoutSchemaType) {
 		const [createdWorkout] = await db
@@ -76,6 +80,33 @@ export class WorkoutService {
 				}
 			})) ?? null
 		);
+	}
+
+	async updateWorkout(
+		userId: string,
+		data: { workoutId: number; name?: string; date: string; notes?: string }
+	) {
+		const [updatedWorkout] = await db
+			.update(workout)
+			.set({
+				name: data.name || null,
+				date: new Date(`${data.date}T12:00:00`),
+				notes: data.notes || null
+			})
+			.where(and(eq(workout.id, data.workoutId), eq(workout.userId, userId)))
+			.returning({ id: workout.id });
+
+		if (!updatedWorkout) throw new Error('Workout not found.');
+		return updatedWorkout;
+	}
+
+	async deleteWorkout(userId: string, workoutId: number) {
+		const [deletedWorkout] = await db
+			.delete(workout)
+			.where(and(eq(workout.id, workoutId), eq(workout.userId, userId)))
+			.returning({ id: workout.id });
+
+		if (!deletedWorkout) throw new Error('Workout not found.');
 	}
 
 	async addExerciseToWorkout(userId: string, data: AddExerciseToWorkoutInput) {
@@ -185,6 +216,112 @@ export class WorkoutService {
 		}
 
 		return createdSet;
+	}
+
+	async updateSet(userId: string, data: UpdateSetInput) {
+		return db.transaction(async (tx) => {
+			const [ownedSet] = await tx
+				.select({ id: set.id })
+				.from(set)
+				.innerJoin(workoutExercise, eq(set.workoutExerciseId, workoutExercise.id))
+				.innerJoin(workout, eq(workoutExercise.workoutId, workout.id))
+				.where(
+					and(
+						eq(set.id, data.setId),
+						eq(set.workoutExerciseId, data.workoutExerciseId),
+						eq(workout.userId, userId)
+					)
+				)
+				.limit(1);
+
+			if (!ownedSet) throw new Error('Set not found.');
+
+			const existingSets = await tx
+				.select({ id: set.id })
+				.from(set)
+				.where(eq(set.workoutExerciseId, data.workoutExerciseId))
+				.orderBy(asc(set.setNumber), asc(set.id));
+			const reorderedSets = existingSets.filter((entry) => entry.id !== data.setId);
+			reorderedSets.splice(Math.min(data.setNumber - 1, reorderedSets.length), 0, {
+				id: data.setId
+			});
+
+			const [updatedSet] = await tx
+				.update(set)
+				.set({
+					reps: data.reps,
+					weight: data.weight,
+					weightUnit: data.weightUnit || 'kg',
+					restTimeSeconds: data.restTimeSeconds,
+					completed: data.completed ?? true
+				})
+				.where(eq(set.id, data.setId))
+				.returning();
+
+			if (!updatedSet) throw new Error('Failed to update set.');
+			for (const [index, entry] of reorderedSets.entries()) {
+				await tx
+					.update(set)
+					.set({ setNumber: index + 1 })
+					.where(eq(set.id, entry.id));
+			}
+			return updatedSet;
+		});
+	}
+
+	async deleteSet(userId: string, setId: number) {
+		return db.transaction(async (tx) => {
+			const [ownedSet] = await tx
+				.select({ id: set.id, workoutExerciseId: set.workoutExerciseId })
+				.from(set)
+				.innerJoin(workoutExercise, eq(set.workoutExerciseId, workoutExercise.id))
+				.innerJoin(workout, eq(workoutExercise.workoutId, workout.id))
+				.where(and(eq(set.id, setId), eq(workout.userId, userId)))
+				.limit(1);
+
+			if (!ownedSet) throw new Error('Set not found.');
+			await tx.delete(set).where(eq(set.id, setId));
+
+			const remainingSets = await tx
+				.select({ id: set.id })
+				.from(set)
+				.where(eq(set.workoutExerciseId, ownedSet.workoutExerciseId))
+				.orderBy(asc(set.setNumber), asc(set.id));
+
+			for (const [index, remainingSet] of remainingSets.entries()) {
+				await tx
+					.update(set)
+					.set({ setNumber: index + 1 })
+					.where(eq(set.id, remainingSet.id));
+			}
+		});
+	}
+
+	async removeExerciseFromWorkout(userId: string, workoutExerciseId: number) {
+		return db.transaction(async (tx) => {
+			const [ownedEntry] = await tx
+				.select({ id: workoutExercise.id, workoutId: workoutExercise.workoutId })
+				.from(workoutExercise)
+				.innerJoin(workout, eq(workoutExercise.workoutId, workout.id))
+				.where(and(eq(workoutExercise.id, workoutExerciseId), eq(workout.userId, userId)))
+				.limit(1);
+
+			if (!ownedEntry) throw new Error('Exercise entry not found.');
+			await tx.delete(workoutExercise).where(eq(workoutExercise.id, workoutExerciseId));
+
+			const remainingExercises = await tx
+				.select({ id: workoutExercise.id })
+				.from(workoutExercise)
+				.where(eq(workoutExercise.workoutId, ownedEntry.workoutId))
+				.orderBy(asc(workoutExercise.order), asc(workoutExercise.id));
+
+			for (const [index, entry] of remainingExercises.entries()) {
+				await tx
+					.update(workoutExercise)
+					.set({ order: index + 1 })
+					.where(eq(workoutExercise.id, entry.id));
+			}
+		});
 	}
 }
 
