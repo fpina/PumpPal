@@ -1,0 +1,5 @@
+# Use a hybrid Exercise Catalog
+
+PumpPal combines curated Catalog Exercises visible to every Athlete with private Custom Exercises owned by one Athlete. This preserves reusable shared movements without exposing athlete-authored data or forcing globally unique custom names; normalized names are unique separately across the curated catalog and within each Athlete's private collection.
+
+Existing exercises become Catalog Exercises because their creator cannot be recovered and changing their visibility would break existing Workout Prescription references. Names are normalized by trimming, collapsing whitespace, and folding case; if legacy rows collide after normalization, every row and reference is preserved and later rows receive a stable legacy suffix. New athlete-created exercises are Custom Exercises. Repetition retains the referenced exercise row, so a repeated Workout Prescription remains safe within the same Athlete's ownership boundary. We rejected a fully global catalog because it leaks athlete-authored data and rejected a fully private catalog because it would duplicate curated movements and make the legacy migration ambiguous.

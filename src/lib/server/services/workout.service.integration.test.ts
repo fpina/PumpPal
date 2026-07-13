@@ -22,7 +22,10 @@ describe('WorkoutService training records', () => {
 			});
 			const [createdExercise] = await db
 				.insert(exercise)
-				.values({ name: `Integration press ${suffix}` })
+				.values({
+					name: `Integration press ${suffix}`,
+					normalizedName: `integration press ${suffix}`
+				})
 				.returning({ id: exercise.id });
 			exerciseId = createdExercise.id;
 

@@ -1,4 +1,4 @@
-import { workoutService } from '$lib/server/services/workout.service';
+import { ExerciseNameConflictError, workoutService } from '$lib/server/services/workout.service';
 import {
 	addExerciseSchema,
 	addSetSchema,
@@ -31,7 +31,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
 	const [workout, availableExercises] = await Promise.all([
 		workoutService.getWorkoutById(locals.user.id, workoutId),
-		workoutService.getExercises()
+		workoutService.getExercises(locals.user.id)
 	]);
 
 	if (!workout) {
@@ -249,10 +249,11 @@ export const actions: Actions = {
 			});
 		} catch (cause) {
 			console.error('Failed to create exercise:', cause);
-			return fail(500, {
+			const conflict = cause instanceof ExerciseNameConflictError;
+			return fail(conflict ? 409 : 500, {
 				intent: 'createExercise' as const,
 				success: false,
-				message: 'Could not create that exercise. Its name may already be in the library.',
+				message: conflict ? cause.message : 'Could not create that Custom Exercise.',
 				errors: {},
 				values
 			});

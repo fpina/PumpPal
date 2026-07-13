@@ -44,7 +44,7 @@ test('an athlete can repeat populated and empty workouts without duplicating sub
 	await expect(page.getByRole('heading', { name: exerciseName })).toBeVisible();
 	await page.getByLabel('Choose exercise').selectOption({ label: `${exerciseName} · Chest` });
 	await page.getByLabel('Notes — optional').fill('Three-second lowering phase');
-	await page.getByRole('button', { name: 'Add from library' }).click();
+	await page.getByRole('button', { name: 'Add from Catalog' }).click();
 
 	const sourceExercise = page.locator('article').nth(2);
 	await sourceExercise.getByLabel('Reps').fill('8');
