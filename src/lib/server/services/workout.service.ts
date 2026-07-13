@@ -4,7 +4,7 @@ import type {
 	CreateWorkoutSchemaType,
 	RepeatWorkoutSchemaType
 } from '$lib/types/workout.validation';
-import { and, asc, desc, eq, isNull, ne } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, ne, or } from 'drizzle-orm';
 
 interface AddExerciseToWorkoutInput {
 	workoutId: number;
@@ -40,6 +40,22 @@ interface CompleteLiveSetInput {
 	reps: number;
 	weight?: number | null;
 	weightUnit: 'kg' | 'lb';
+}
+
+export class ExerciseNameConflictError extends Error {
+	constructor() {
+		super('A Custom Exercise with that name already exists.');
+		this.name = 'ExerciseNameConflictError';
+	}
+}
+
+function exerciseNames(name: string) {
+	const displayName = name.trim().replace(/\s+/gu, ' ');
+	return { displayName, normalizedName: displayName.toLowerCase() };
+}
+
+function exerciseVisibleToAthlete(athleteId: string) {
+	return or(isNull(exercise.ownerId), eq(exercise.ownerId, athleteId));
 }
 
 function setCompletionFields(data: AddSetToWorkoutExerciseInput) {
@@ -81,8 +97,12 @@ export class WorkoutService {
 			.orderBy(desc(workout.date), desc(workout.id));
 	}
 
-	async getExercises() {
-		return db.select().from(exercise).orderBy(asc(exercise.name));
+	async getExercises(userId: string) {
+		return db
+			.select()
+			.from(exercise)
+			.where(exerciseVisibleToAthlete(userId))
+			.orderBy(asc(exercise.name));
 	}
 
 	async getWorkoutById(userId: string, workoutId: number) {
@@ -508,7 +528,7 @@ export class WorkoutService {
 			const [existingExercise] = await tx
 				.select({ id: exercise.id })
 				.from(exercise)
-				.where(eq(exercise.id, data.exerciseId))
+				.where(and(eq(exercise.id, data.exerciseId), exerciseVisibleToAthlete(userId)))
 				.limit(1);
 			if (!existingExercise) throw new Error('Exercise not found.');
 
@@ -528,6 +548,7 @@ export class WorkoutService {
 
 	async createExerciseForWorkout(userId: string, data: CreateExerciseForWorkoutInput) {
 		return db.transaction(async (tx) => {
+			const names = exerciseNames(data.name);
 			const [ownedWorkout] = await tx
 				.select({ id: workout.id, finishedAt: workout.finishedAt })
 				.from(workout)
@@ -542,14 +563,17 @@ export class WorkoutService {
 			const [createdExercise] = await tx
 				.insert(exercise)
 				.values({
-					name: data.name,
+					ownerId: userId,
+					name: names.displayName,
+					normalizedName: names.normalizedName,
 					muscleGroup: data.muscleGroup || null,
 					description: data.description || null
 				})
+				.onConflictDoNothing()
 				.returning({ id: exercise.id });
 
 			if (!createdExercise) {
-				throw new Error('Failed to create exercise.');
+				throw new ExerciseNameConflictError();
 			}
 
 			const [createdWorkoutExercise] = await tx

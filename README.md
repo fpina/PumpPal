@@ -51,7 +51,7 @@ With intelligent workout suggestions tailored to your goals, a fast and intuitiv
 
 - Email/password registration, login, sessions, and logout
 - User-owned workout logging
-- Reusable exercise library and custom exercises
+- Shared Catalog Exercises and private Custom Exercises
 - Sets, reps, weight, rest time, and completion tracking
 
 Performance visualization and intelligent workout suggestions remain future work.

@@ -519,7 +519,7 @@
 						></span
 					>
 					<div>
-						<h3 class="m-0 text-lg font-black">Exercise library</h3>
+						<h3 class="m-0 text-lg font-black">Exercise Catalog</h3>
 						<p class="mt-0.5 text-xs text-[#74877e]">Reuse a movement you already know.</p>
 					</div>
 				</div>
@@ -554,7 +554,7 @@
 				<button
 					type="submit"
 					disabled={data.availableExercises.length === 0}
-					class="button-primary mt-5 w-full">Add from library</button
+					class="button-primary mt-5 w-full">Add from Catalog</button
 				>
 				{#if form?.intent === 'addExercise' && !form.success && Object.keys(form.errors).length > 0}<p
 						class="field-error"
@@ -576,8 +576,8 @@
 						></span
 					>
 					<div>
-						<h3 class="m-0 text-lg font-black">New exercise</h3>
-						<p class="mt-0.5 text-xs text-[#74877e]">Create it once. Reuse it forever.</p>
+						<h3 class="m-0 text-lg font-black">New Custom Exercise</h3>
+						<p class="mt-0.5 text-xs text-[#74877e]">Private to your Exercise Catalog.</p>
 					</div>
 				</div>
 				<input type="hidden" name="order" value={data.workout.workoutExercises.length + 1} />

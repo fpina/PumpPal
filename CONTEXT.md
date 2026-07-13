@@ -29,5 +29,13 @@ One continuous timed interval within a Training Session. Reopening a finished Tr
 _Avoid_: Timer interval, resume period
 
 **Exercise Catalog**:
-The collection of exercises that can be added to a Workout Prescription. Its ownership and visibility policy is defined separately.
+The combined collection of shared Catalog Exercises and an Athlete's private Custom Exercises that may be added to a Workout Prescription.
 _Avoid_: Exercise library, master list
+
+**Catalog Exercise**:
+A curated exercise visible to every Athlete and owned by PumpPal rather than an individual Athlete.
+_Avoid_: Global exercise, system exercise
+
+**Custom Exercise**:
+An exercise owned by one Athlete and visible only to that Athlete. Its normalized name is unique among that Athlete's Custom Exercises.
+_Avoid_: Personal exercise, user exercise

@@ -27,7 +27,8 @@ export const user = pgTable('user', {
 });
 
 export const usersRelations = relations(user, ({ many }) => ({
-	workouts: many(workout)
+	workouts: many(workout),
+	customExercises: many(exercise)
 }));
 
 export type User = typeof user.$inferSelect;
@@ -75,17 +76,34 @@ export const verification = pgTable('verification', {
 	updatedAt: timestamp('updated_at')
 });
 
-// --- Exercises ---
-// Master list of all possible exercises
-export const exercise = pgTable('exercise', {
-	id: serial('id').primaryKey(),
-	name: varchar('name', { length: 255 }).notNull().unique(),
-	description: text('description'),
-	muscleGroup: varchar('muscle_group', { length: 100 }), // e.g., 'Chest', 'Legs', 'Back'
-	createdAt: timestamp('created_at').defaultNow().notNull()
-});
+// --- Exercise Catalog ---
+// Shared Catalog Exercises and Athlete-owned Custom Exercises
+export const exercise = pgTable(
+	'exercise',
+	{
+		id: serial('id').primaryKey(),
+		ownerId: text('owner_id').references(() => user.id, { onDelete: 'cascade' }),
+		name: varchar('name', { length: 255 }).notNull(),
+		normalizedName: varchar('normalized_name', { length: 255 }).notNull(),
+		description: text('description'),
+		muscleGroup: varchar('muscle_group', { length: 100 }), // e.g., 'Chest', 'Legs', 'Back'
+		createdAt: timestamp('created_at').defaultNow().notNull()
+	},
+	(table) => [
+		uniqueIndex('exercise_catalog_normalized_name_unique')
+			.on(table.normalizedName)
+			.where(sql`${table.ownerId} is null`),
+		uniqueIndex('exercise_owner_normalized_name_unique')
+			.on(table.ownerId, table.normalizedName)
+			.where(sql`${table.ownerId} is not null`)
+	]
+);
 
-export const exercisesRelations = relations(exercise, ({ many }) => ({
+export const exercisesRelations = relations(exercise, ({ one, many }) => ({
+	owner: one(user, {
+		fields: [exercise.ownerId],
+		references: [user.id]
+	}),
 	workoutExercises: many(workoutExercise)
 }));
 
