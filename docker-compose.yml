@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres
+    image: postgres:16.4
     restart: always
     ports:
       - 5433:5432
