@@ -1,0 +1,3 @@
+ALTER TABLE "set" ADD CONSTRAINT "set_status_check" CHECK ("set"."status" in ('planned', 'active', 'completed', 'skipped'));--> statement-breakpoint
+ALTER TABLE "set" ADD CONSTRAINT "set_completion_status_check" CHECK ("set"."completed" = ("set"."status" = 'completed'));--> statement-breakpoint
+ALTER TABLE "workout" ADD CONSTRAINT "workout_session_status_check" CHECK ("workout"."session_status" in ('planned', 'active', 'finished'));

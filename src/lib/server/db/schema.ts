@@ -7,9 +7,13 @@ import {
 	timestamp,
 	boolean,
 	varchar,
-	uniqueIndex
+	uniqueIndex,
+	check
 } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
+
+export type WorkoutSessionStatus = 'planned' | 'active' | 'finished';
+export type WorkoutSetStatus = 'planned' | 'active' | 'completed' | 'skipped';
 
 // --- Users ---
 export const user = pgTable('user', {
@@ -99,9 +103,23 @@ export const workout = pgTable(
 		date: timestamp('date').notNull(), // When the workout occurred
 		notes: text('notes'), // General notes for the workout session
 		repeatToken: text('repeat_token'),
+		sessionStatus: varchar('session_status', { length: 20 })
+			.$type<WorkoutSessionStatus>()
+			.default('planned')
+			.notNull(),
+		startedAt: timestamp('started_at'),
+		finishedAt: timestamp('finished_at'),
+		durationSeconds: integer('duration_seconds'),
+		restEndsAt: timestamp('rest_ends_at'),
 		createdAt: timestamp('created_at').defaultNow().notNull()
 	},
-	(table) => [uniqueIndex('workout_repeat_token_unique').on(table.repeatToken)]
+	(table) => [
+		uniqueIndex('workout_repeat_token_unique').on(table.repeatToken),
+		check(
+			'workout_session_status_check',
+			sql`${table.sessionStatus} in ('planned', 'active', 'finished')`
+		)
+	]
 );
 
 export const workoutsRelations = relations(workout, ({ one, many }) => ({
@@ -143,19 +161,34 @@ export const workoutExercisesRelations = relations(workoutExercise, ({ one, many
 export type WorkoutExercise = typeof workoutExercise.$inferSelect;
 // --- Sets ---
 // Represents a single set performed for a specific exercise within a workout
-export const set = pgTable('set', {
-	id: serial('id').primaryKey(),
-	workoutExerciseId: integer('workout_exercise_id')
-		.notNull()
-		.references(() => workoutExercise.id, { onDelete: 'cascade' }),
-	setNumber: integer('set_number').notNull(), // e.g., 1, 2, 3
-	reps: integer('reps').notNull(),
-	weight: numeric('weight', { precision: 8, scale: 2, mode: 'number' }),
-	weightUnit: varchar('weight_unit', { length: 10 }).default('kg'), // e.g., 'kg', 'lbs'
-	restTimeSeconds: integer('rest_time_seconds'), // Optional rest time after the set
-	completed: boolean('completed').default(true).notNull(), // Mark if the set was actually done
-	createdAt: timestamp('created_at').defaultNow().notNull()
-});
+export const set = pgTable(
+	'set',
+	{
+		id: serial('id').primaryKey(),
+		workoutExerciseId: integer('workout_exercise_id')
+			.notNull()
+			.references(() => workoutExercise.id, { onDelete: 'cascade' }),
+		setNumber: integer('set_number').notNull(), // e.g., 1, 2, 3
+		reps: integer('reps').notNull(),
+		weight: numeric('weight', { precision: 8, scale: 2, mode: 'number' }),
+		weightUnit: varchar('weight_unit', { length: 10 }).default('kg'), // e.g., 'kg', 'lbs'
+		restTimeSeconds: integer('rest_time_seconds'), // Optional rest time after the set
+		completed: boolean('completed').default(true).notNull(), // Mark if the set was actually done
+		status: varchar('status', { length: 20 })
+			.$type<WorkoutSetStatus>()
+			.default('planned')
+			.notNull(),
+		completedAt: timestamp('completed_at'),
+		createdAt: timestamp('created_at').defaultNow().notNull()
+	},
+	(table) => [
+		check(
+			'set_status_check',
+			sql`${table.status} in ('planned', 'active', 'completed', 'skipped')`
+		),
+		check('set_completion_status_check', sql`${table.completed} = (${table.status} = 'completed')`)
+	]
+);
 
 export const setsRelations = relations(set, ({ one }) => ({
 	workoutExercise: one(workoutExercise, {

@@ -32,6 +32,16 @@
 					</p>{/if}
 			</div>
 			<div class="flex flex-col items-start gap-5 lg:items-end">
+				<a
+					href={`/workouts/${data.workout.id}/live`}
+					class={data.workout.sessionStatus === 'active' ? 'button-primary' : 'button-secondary'}
+				>
+					{data.workout.sessionStatus === 'planned'
+						? 'Start workout'
+						: data.workout.sessionStatus === 'active'
+							? 'Resume workout'
+							: 'View finished workout'}
+				</a>
 				<div class="flex flex-wrap gap-7">
 					<div class="metric">
 						<strong>{data.workout.workoutExercises.length}</strong><span
@@ -67,6 +77,16 @@
 			</div>
 		</div>
 	</section>
+
+	{#if data.workout.sessionStatus === 'active'}
+		<p class="status-message !border-[#3ee8cf]/25 !bg-[#3ee8cf]/8 !text-[#6ff5df]">
+			This workout is live. You can leave this page and resume without losing the session timer.
+		</p>
+	{:else if data.workout.sessionStatus === 'finished'}
+		<p class="status-message">
+			This session is finished and editing is locked. Reopen it from live training to make changes.
+		</p>
+	{/if}
 
 	<details class="surface group overflow-hidden">
 		<summary
@@ -109,23 +129,25 @@
 					<button type="submit" class="button-primary">Save workout</button>
 				</div>
 			</form>
-			<form
-				method="POST"
-				action="?/deleteWorkout"
-				onsubmit={(event) =>
-					confirmSubmission(
-						event,
-						'Delete this workout and all of its sets? This cannot be undone.'
-					)}
-				class="mt-5 border-t border-white/6 pt-5"
-			>
-				<input type="hidden" name="workoutId" value={data.workout.id} />
-				<button
-					type="submit"
-					class="button-ghost !border-red-400/25 !text-red-300 hover:!bg-red-400/10"
-					>Delete workout</button
+			{#if data.workout.sessionStatus !== 'finished'}
+				<form
+					method="POST"
+					action="?/deleteWorkout"
+					onsubmit={(event) =>
+						confirmSubmission(
+							event,
+							'Delete this workout and all of its sets? This cannot be undone.'
+						)}
+					class="mt-5 border-t border-white/6 pt-5"
 				>
-			</form>
+					<input type="hidden" name="workoutId" value={data.workout.id} />
+					<button
+						type="submit"
+						class="button-ghost !border-red-400/25 !text-red-300 hover:!bg-red-400/10"
+						>Delete workout</button
+					>
+				</form>
+			{/if}
 		</div>
 	</details>
 

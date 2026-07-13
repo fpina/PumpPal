@@ -75,6 +75,12 @@ export const repeatWorkoutSchema = workoutMutationSchema.extend({
 	repeatToken: z.string().uuid('Repeat request is invalid.')
 });
 
+export const liveSetSchema = setMutationSchema.extend({
+	reps: z.coerce.number().int().min(0, 'Reps cannot be negative.').max(10_000),
+	weight: optionalNumber(),
+	weightUnit: z.enum(['kg', 'lb'])
+});
+
 export type RepeatWorkoutSchemaType = z.infer<typeof repeatWorkoutSchema>;
 
 export type CreateWorkoutSchema = typeof createWorkoutSchema;

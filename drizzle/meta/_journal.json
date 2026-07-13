@@ -15,6 +15,20 @@
       "when": 1783804553998,
       "tag": "0001_loud_living_mummy",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783939761996,
+      "tag": "0002_glossy_annihilus",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783940775925,
+      "tag": "0003_fixed_proemial_gods",
+      "breakpoints": true
     }
   ]
 }
