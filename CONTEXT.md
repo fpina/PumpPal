@@ -28,6 +28,18 @@ _Avoid_: Actual set, completed set
 One continuous timed interval within a Training Session. Reopening a finished Training Session begins another segment without rewriting earlier segments.
 _Avoid_: Timer interval, resume period
 
+**Workout Date**:
+The calendar day an Athlete assigns to a Workout Prescription, independent of timezone or time of day.
+_Avoid_: Workout timestamp, session date
+
+**Session Instant**:
+A precise moment when a Training Session event occurred, such as starting, completing a set, or finishing.
+_Avoid_: Session date, calendar time
+
+**Elapsed Duration**:
+The amount of active time accumulated during a Training Session.
+_Avoid_: Duration timestamp, elapsed date
+
 **Exercise Catalog**:
 The combined collection of shared Catalog Exercises and an Athlete's private Custom Exercises that may be added to a Workout Prescription.
 _Avoid_: Exercise library, master list

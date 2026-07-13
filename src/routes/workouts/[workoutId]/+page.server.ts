@@ -48,7 +48,8 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const values = {
 			workoutId: String(formData.get('workoutId') ?? ''),
-			repeatToken: String(formData.get('repeatToken') ?? '')
+			repeatToken: String(formData.get('repeatToken') ?? ''),
+			date: String(formData.get('date') ?? '')
 		};
 		const result = repeatWorkoutSchema.safeParse(values);
 

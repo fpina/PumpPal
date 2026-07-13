@@ -1,12 +1,14 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { currentWorkoutDate } from '$lib/workout-date';
+	import { onMount } from 'svelte';
 
 	let { form } = $props();
+	let localToday = $state('');
 
-	const now = new Date();
-	const localToday = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
-		.toISOString()
-		.slice(0, 10);
+	onMount(() => {
+		localToday = currentWorkoutDate();
+	});
 </script>
 
 <section class="mx-auto max-w-5xl">
@@ -24,7 +26,7 @@
 
 			<form method="POST" action="?/create" use:enhance class="mt-7 space-y-5">
 				<div>
-					<label for="date" class="field-label">Training date</label><input
+					<label for="date" class="field-label">Workout Date</label><input
 						type="date"
 						id="date"
 						name="date"
