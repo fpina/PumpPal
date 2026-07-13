@@ -1,4 +1,6 @@
 import { auth } from '$lib/auth';
+import { isExpectedAuthFailure } from '$lib/server/auth-error';
+import { logOperationalFailure } from '$lib/server/operational-log';
 import { registerSchema } from '$lib/types/register.validation';
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
@@ -34,11 +36,24 @@ export const actions: Actions = {
 				body: { name, email, password },
 				headers: request.headers
 			});
-		} catch (error) {
-			console.error('Registration failed:', error);
-			return fail(400, {
+		} catch (cause) {
+			if (isExpectedAuthFailure('register', cause)) {
+				return fail(400, {
+					success: false,
+					message: 'Could not create that account. The email may already be registered.',
+					errors: {
+						name: undefined,
+						email: undefined,
+						password: undefined,
+						confirmPassword: undefined
+					},
+					values
+				});
+			}
+			logOperationalFailure('auth.register', cause);
+			return fail(500, {
 				success: false,
-				message: 'Could not create that account. The email may already be registered.',
+				message: 'Could not create that account. Please try again.',
 				errors: {
 					name: undefined,
 					email: undefined,

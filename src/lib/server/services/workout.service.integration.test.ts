@@ -24,9 +24,9 @@ describe('WorkoutService training records', () => {
 				setNumber: 1,
 				reps: 8,
 				weight: 100,
-				weightUnit: 'kg',
-				completed: false
+				weightUnit: 'kg'
 			});
+			expect(targetSet).toMatchObject({ completed: false, status: 'planned' });
 
 			await workoutService.startWorkout(athlete.id, createdWorkout.id);
 			await workoutService.activateSet(athlete.id, createdWorkout.id, targetSet.id);

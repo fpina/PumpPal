@@ -1,4 +1,9 @@
-import { ExerciseNameConflictError, workoutService } from '$lib/server/services/workout.service';
+import {
+	ExerciseNameConflictError,
+	WorkoutDomainError,
+	workoutService
+} from '$lib/server/services/workout.service';
+import { logOperationalFailure } from '$lib/server/operational-log';
 import {
 	addExerciseSchema,
 	addSetSchema,
@@ -29,10 +34,17 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		throw error(404, 'Workout not found.');
 	}
 
-	const [workout, availableExercises] = await Promise.all([
-		workoutService.getWorkoutById(locals.user.id, workoutId),
-		workoutService.getExercises(locals.user.id)
-	]);
+	let workout;
+	let availableExercises;
+	try {
+		[workout, availableExercises] = await Promise.all([
+			workoutService.getWorkoutById(locals.user.id, workoutId),
+			workoutService.getExercises(locals.user.id)
+		]);
+	} catch (cause) {
+		logOperationalFailure('workout.load', cause);
+		throw error(500, 'Could not load this workout.');
+	}
 
 	if (!workout) {
 		throw error(404, 'Workout not found.');
@@ -67,11 +79,20 @@ export const actions: Actions = {
 		try {
 			repeatedWorkout = await workoutService.repeatWorkout(locals.user.id, result.data);
 		} catch (cause) {
-			console.error('Failed to repeat workout:', cause);
-			return fail(404, {
+			if (cause instanceof WorkoutDomainError) {
+				return fail(404, {
+					intent: 'repeatWorkout' as const,
+					success: false,
+					message: 'Workout not found.',
+					errors: {},
+					values
+				});
+			}
+			logOperationalFailure('workout.repeat', cause);
+			return fail(500, {
 				intent: 'repeatWorkout' as const,
 				success: false,
-				message: 'Workout not found.',
+				message: 'Could not repeat this workout. Please try again.',
 				errors: {},
 				values
 			});
@@ -103,11 +124,20 @@ export const actions: Actions = {
 		try {
 			await workoutService.updateWorkout(locals.user.id, result.data);
 		} catch (cause) {
-			console.error('Failed to update workout:', cause);
-			return fail(404, {
+			if (cause instanceof WorkoutDomainError) {
+				return fail(404, {
+					intent: 'updateWorkout' as const,
+					success: false,
+					message: 'Workout not found.',
+					errors: {},
+					values
+				});
+			}
+			logOperationalFailure('workout.update', cause);
+			return fail(500, {
 				intent: 'updateWorkout' as const,
 				success: false,
-				message: 'Workout not found.',
+				message: 'Could not update this workout. Please try again.',
 				errors: {},
 				values
 			});
@@ -139,11 +169,20 @@ export const actions: Actions = {
 		try {
 			await workoutService.deleteWorkout(locals.user.id, result.data.workoutId);
 		} catch (cause) {
-			console.error('Failed to delete workout:', cause);
-			return fail(404, {
+			if (cause instanceof WorkoutDomainError) {
+				return fail(404, {
+					intent: 'deleteWorkout' as const,
+					success: false,
+					message: 'Workout not found.',
+					errors: {},
+					values: {}
+				});
+			}
+			logOperationalFailure('workout.delete', cause);
+			return fail(500, {
 				intent: 'deleteWorkout' as const,
 				success: false,
-				message: 'Workout not found.',
+				message: 'Could not delete this workout. Please try again.',
 				errors: {},
 				values: {}
 			});
@@ -190,11 +229,20 @@ export const actions: Actions = {
 				...result.data
 			});
 		} catch (cause) {
-			console.error('Failed to add exercise:', cause);
+			if (cause instanceof WorkoutDomainError) {
+				return fail(404, {
+					intent: 'addExercise' as const,
+					success: false,
+					message: 'Exercise not found.',
+					errors: {},
+					values
+				});
+			}
+			logOperationalFailure('workout.add_exercise', cause);
 			return fail(500, {
 				intent: 'addExercise' as const,
 				success: false,
-				message: 'Could not add that exercise.',
+				message: 'Could not add that exercise. Please try again.',
 				errors: {},
 				values
 			});
@@ -249,12 +297,21 @@ export const actions: Actions = {
 				...result.data
 			});
 		} catch (cause) {
-			console.error('Failed to create exercise:', cause);
 			const conflict = cause instanceof ExerciseNameConflictError;
-			return fail(conflict ? 409 : 500, {
+			if (conflict || cause instanceof WorkoutDomainError) {
+				return fail(conflict ? 409 : 404, {
+					intent: 'createExercise' as const,
+					success: false,
+					message: conflict ? cause.message : 'Workout not found.',
+					errors: {},
+					values
+				});
+			}
+			logOperationalFailure('workout.create_exercise', cause);
+			return fail(500, {
 				intent: 'createExercise' as const,
 				success: false,
-				message: conflict ? cause.message : 'Could not create that Custom Exercise.',
+				message: 'Could not create that Custom Exercise. Please try again.',
 				errors: {},
 				values
 			});
@@ -301,12 +358,22 @@ export const actions: Actions = {
 		try {
 			await workoutService.addSetToWorkoutExercise(locals.user.id, result.data);
 		} catch (cause) {
-			console.error('Failed to add set:', cause);
+			if (cause instanceof WorkoutDomainError) {
+				return fail(404, {
+					intent: 'addSet' as const,
+					success: false,
+					targetId,
+					message: 'Exercise entry not found.',
+					errors: {},
+					values
+				});
+			}
+			logOperationalFailure('workout.add_set', cause);
 			return fail(500, {
 				intent: 'addSet' as const,
 				success: false,
 				targetId,
-				message: 'Could not save that set.',
+				message: 'Could not save that set. Please try again.',
 				errors: {},
 				values
 			});
@@ -358,12 +425,22 @@ export const actions: Actions = {
 		try {
 			await workoutService.updateSet(locals.user.id, result.data);
 		} catch (cause) {
-			console.error('Failed to update set:', cause);
-			return fail(404, {
+			if (cause instanceof WorkoutDomainError) {
+				return fail(404, {
+					intent: 'updateSet' as const,
+					success: false,
+					targetId,
+					message: 'Set not found.',
+					errors: {},
+					values
+				});
+			}
+			logOperationalFailure('workout.update_set', cause);
+			return fail(500, {
 				intent: 'updateSet' as const,
 				success: false,
 				targetId,
-				message: 'Set not found.',
+				message: 'Could not update that set. Please try again.',
 				errors: {},
 				values
 			});
@@ -393,11 +470,20 @@ export const actions: Actions = {
 		try {
 			await workoutService.deleteSet(locals.user.id, result.data.setId);
 		} catch (cause) {
-			console.error('Failed to delete set:', cause);
-			return fail(404, {
+			if (cause instanceof WorkoutDomainError) {
+				return fail(404, {
+					intent: 'deleteSet' as const,
+					success: false,
+					message: 'Set not found.',
+					errors: {},
+					values: {}
+				});
+			}
+			logOperationalFailure('workout.delete_set', cause);
+			return fail(500, {
 				intent: 'deleteSet' as const,
 				success: false,
-				message: 'Set not found.',
+				message: 'Could not delete that set. Please try again.',
 				errors: {},
 				values: {}
 			});
@@ -428,11 +514,20 @@ export const actions: Actions = {
 		try {
 			await workoutService.removeExerciseFromWorkout(locals.user.id, result.data.workoutExerciseId);
 		} catch (cause) {
-			console.error('Failed to remove exercise:', cause);
-			return fail(404, {
+			if (cause instanceof WorkoutDomainError) {
+				return fail(404, {
+					intent: 'removeExercise' as const,
+					success: false,
+					message: 'Exercise entry not found.',
+					errors: {},
+					values: {}
+				});
+			}
+			logOperationalFailure('workout.remove_exercise', cause);
+			return fail(500, {
 				intent: 'removeExercise' as const,
 				success: false,
-				message: 'Exercise entry not found.',
+				message: 'Could not remove that exercise. Please try again.',
 				errors: {},
 				values: {}
 			});

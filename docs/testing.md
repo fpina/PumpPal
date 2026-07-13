@@ -20,6 +20,6 @@ The source database name changes with the configured `DATABASE_URL`; the names a
 
 ## Isolation and parallel execution
 
-Integration fixtures take a PostgreSQL advisory lock while resetting and using their shared database, so files cannot erase one another's data. Playwright Athletes receive UUID-backed emails and are deleted after each test, with related authentication and workout data removed by database cascades.
+Vitest runs files serially because integration fixtures reset one shared database; the fixture also takes a PostgreSQL advisory lock while it owns that database. Playwright Athletes receive UUID-backed emails and are deleted after each test, with related authentication and workout data removed by database cascades.
 
 Separate test processes or CI shards must set a distinct `PUMPPAL_TEST_RUN_ID`. For example, `PUMPPAL_TEST_RUN_ID=shard_2` derives `local_test_integration_shard_2` and `local_test_e2e_shard_2`. This provides one isolated database pair per process; Playwright workers can then be increased after the journeys assigned to that shard have been checked for shared non-Athlete fixtures.

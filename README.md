@@ -12,7 +12,6 @@ With intelligent workout suggestions tailored to your goals, a fast and intuitiv
 - **Database ORM:** Drizzle ORM
 - **Database:** PostgreSQL (via Docker)
 - **Authentication:** Better Auth (email and password)
-- **UI Components:** Storybook
 - **Testing:** Vitest (Unit), Playwright (E2E)
 - **Linting/Formatting:** ESLint, Prettier
 
@@ -36,11 +35,16 @@ With intelligent workout suggestions tailored to your goals, a fast and intuitiv
     npm run db:start
     ```
     _(Ensure Docker Desktop is running)_
-5.  **Apply database schema:**
+5.  **Apply database migrations:**
+
     ```bash
-    npm run db:push
+    npm run db:migrate
     ```
-    _(Run this after any changes to `src/lib/server/db/schema.ts`)_
+
+    PumpPal uses the committed `drizzle/` migration history as the only schema-delivery path. After changing `src/lib/server/db/schema.ts`, generate and commit a new migration with `npx drizzle-kit generate`; do not use schema push for local, CI, or deployment databases.
+
+    If your local database was created by the retired schema-push workflow, recreate that local development database before its first migration run. It has no migration ledger, so replaying the initial schema against it is intentionally rejected.
+
 6.  **Run the development server:**
     ```bash
     npm run dev -- --open
@@ -60,9 +64,13 @@ Performance visualization and intelligent workout suggestions remain future work
 
 - `src/lib/server/db/`: Drizzle ORM setup (schema, database connection).
 - `src/routes/`: SvelteKit routes defining the application pages and API endpoints.
-- `src/lib/components/`: Reusable Svelte components (if needed).
-- `src/stories/`: Storybook stories for UI components.
-- `drizzle/`: Drizzle Kit migration files (if using `db:migrate`).
+- `drizzle/`: Authoritative versioned Drizzle migrations.
+- `tests/harness/`: Isolated PostgreSQL integration and browser-test harnesses.
+- `.github/workflows/`: CI quality gates, including empty-database migration verification.
+
+## Delivery and operations
+
+Run `npm run db:migrate` against every environment before starting the application. CI starts from an empty PostgreSQL database, applies the same migration history, then runs typechecking, linting, unit/integration and browser tests, and a production build. See [testing documentation](docs/testing.md) for test database isolation.
 
 ## Contributing
 

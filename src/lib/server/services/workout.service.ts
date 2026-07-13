@@ -42,7 +42,14 @@ interface CompleteLiveSetInput {
 	weightUnit: 'kg' | 'lb';
 }
 
-export class ExerciseNameConflictError extends Error {
+export class WorkoutDomainError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'WorkoutDomainError';
+	}
+}
+
+export class ExerciseNameConflictError extends WorkoutDomainError {
 	constructor() {
 		super('A Custom Exercise with that name already exists.');
 		this.name = 'ExerciseNameConflictError';
@@ -59,7 +66,7 @@ function exerciseVisibleToAthlete(athleteId: string) {
 }
 
 function setCompletionFields(data: AddSetToWorkoutExerciseInput) {
-	const completed = data.completed ?? true;
+	const completed = data.completed ?? false;
 	return {
 		completed,
 		status: completed ? ('completed' as const) : ('planned' as const),
@@ -159,8 +166,9 @@ export class WorkoutService {
 				.where(and(eq(workout.id, workoutId), eq(workout.userId, userId)))
 				.limit(1);
 			if (existing?.sessionStatus === 'active') return existing;
-			if (existing?.sessionStatus === 'finished') throw new Error('Reopen this workout first.');
-			throw new Error('Workout not found.');
+			if (existing?.sessionStatus === 'finished')
+				throw new WorkoutDomainError('Reopen this workout first.');
+			throw new WorkoutDomainError('Workout not found.');
 		});
 	}
 
@@ -178,7 +186,8 @@ export class WorkoutService {
 				)
 				.limit(1)
 				.for('update');
-			if (!activeWorkout?.activeStartedAt) throw new Error('Active workout not found.');
+			if (!activeWorkout?.activeStartedAt)
+				throw new WorkoutDomainError('Active workout not found.');
 
 			const finishedAt = new Date();
 			const segmentDurationSeconds = Math.max(
@@ -193,7 +202,7 @@ export class WorkoutService {
 				.orderBy(desc(trainingSegment.startedAt), desc(trainingSegment.id))
 				.limit(1)
 				.for('update');
-			if (!openSegment) throw new Error('Active Training Segment not found.');
+			if (!openSegment) throw new WorkoutDomainError('Active Training Segment not found.');
 			await tx
 				.update(trainingSegment)
 				.set({ finishedAt, durationSeconds: segmentDurationSeconds })
@@ -236,7 +245,7 @@ export class WorkoutService {
 				)
 				.limit(1)
 				.for('update');
-			if (!existing) throw new Error('Finished workout not found.');
+			if (!existing) throw new WorkoutDomainError('Finished workout not found.');
 
 			const activeStartedAt = new Date();
 			await tx.insert(trainingSegment).values({ workoutId, startedAt: activeStartedAt });
@@ -263,7 +272,7 @@ export class WorkoutService {
 				)
 				.limit(1)
 				.for('update');
-			if (!activeWorkout) throw new Error('Active workout not found.');
+			if (!activeWorkout) throw new WorkoutDomainError('Active workout not found.');
 
 			const [targetSet] = await tx
 				.select({ id: set.id, status: set.status })
@@ -280,7 +289,7 @@ export class WorkoutService {
 				)
 				.limit(1);
 			if (!targetSet || !['planned', 'skipped', 'active'].includes(targetSet.status))
-				throw new Error('Set is not available.');
+				throw new WorkoutDomainError('Set is not available.');
 
 			const activeSets = await tx
 				.select({ id: set.id })
@@ -314,7 +323,7 @@ export class WorkoutService {
 				)
 				.limit(1)
 				.for('update');
-			if (!activeWorkout) throw new Error('Active workout not found.');
+			if (!activeWorkout) throw new WorkoutDomainError('Active workout not found.');
 
 			const [targetSet] = await tx
 				.select({ id: set.id, restTimeSeconds: set.restTimeSeconds })
@@ -331,7 +340,7 @@ export class WorkoutService {
 					)
 				)
 				.limit(1);
-			if (!targetSet) throw new Error('Active set not found.');
+			if (!targetSet) throw new WorkoutDomainError('Active set not found.');
 
 			const completedAt = new Date();
 			const [completedSet] = await tx
@@ -371,7 +380,7 @@ export class WorkoutService {
 				)
 				.limit(1)
 				.for('update');
-			if (!activeWorkout) throw new Error('Active workout not found.');
+			if (!activeWorkout) throw new WorkoutDomainError('Active workout not found.');
 
 			const [ownedSet] = await tx
 				.select({ id: set.id })
@@ -385,7 +394,7 @@ export class WorkoutService {
 					)
 				)
 				.limit(1);
-			if (!ownedSet) throw new Error('Set not found.');
+			if (!ownedSet) throw new WorkoutDomainError('Set not found.');
 
 			const [skippedSet] = await tx
 				.update(set)
@@ -408,7 +417,7 @@ export class WorkoutService {
 				)
 			)
 			.returning({ id: workout.id });
-		if (!updatedWorkout) throw new Error('Active workout not found.');
+		if (!updatedWorkout) throw new WorkoutDomainError('Active workout not found.');
 	}
 
 	async updateWorkout(
@@ -427,7 +436,7 @@ export class WorkoutService {
 			)
 			.returning({ id: workout.id });
 
-		if (!updatedWorkout) throw new Error('Workout not found.');
+		if (!updatedWorkout) throw new WorkoutDomainError('Workout not found.');
 		return updatedWorkout;
 	}
 
@@ -437,7 +446,7 @@ export class WorkoutService {
 			.where(and(eq(workout.id, workoutId), eq(workout.userId, userId), isNull(workout.finishedAt)))
 			.returning({ id: workout.id });
 
-		if (!deletedWorkout) throw new Error('Workout not found.');
+		if (!deletedWorkout) throw new WorkoutDomainError('Workout not found.');
 	}
 
 	async repeatWorkout(userId: string, data: RepeatWorkoutSchemaType) {
@@ -456,7 +465,7 @@ export class WorkoutService {
 				}
 			});
 
-			if (!sourceWorkout) throw new Error('Workout not found.');
+			if (!sourceWorkout) throw new WorkoutDomainError('Workout not found.');
 			const [createdWorkout] = await tx
 				.insert(workout)
 				.values({
@@ -475,7 +484,7 @@ export class WorkoutService {
 					.from(workout)
 					.where(and(eq(workout.repeatToken, data.repeatToken), eq(workout.userId, userId)))
 					.limit(1);
-				if (!existingWorkout) throw new Error('Repeat request already used.');
+				if (!existingWorkout) throw new WorkoutDomainError('Repeat request already used.');
 				return existingWorkout;
 			}
 
@@ -518,14 +527,15 @@ export class WorkoutService {
 				.where(and(eq(workout.id, data.workoutId), eq(workout.userId, userId)))
 				.limit(1)
 				.for('update');
-			if (!ownedWorkout || ownedWorkout.finishedAt) throw new Error('Workout not found.');
+			if (!ownedWorkout || ownedWorkout.finishedAt)
+				throw new WorkoutDomainError('Workout not found.');
 
 			const [existingExercise] = await tx
 				.select({ id: exercise.id })
 				.from(exercise)
 				.where(and(eq(exercise.id, data.exerciseId), exerciseVisibleToAthlete(userId)))
 				.limit(1);
-			if (!existingExercise) throw new Error('Exercise not found.');
+			if (!existingExercise) throw new WorkoutDomainError('Exercise not found.');
 
 			const [createdWorkoutExercise] = await tx
 				.insert(workoutExercise)
@@ -552,7 +562,7 @@ export class WorkoutService {
 				.for('update');
 
 			if (!ownedWorkout || ownedWorkout.finishedAt) {
-				throw new Error('Workout not found.');
+				throw new WorkoutDomainError('Workout not found.');
 			}
 
 			const [createdExercise] = await tx
@@ -598,7 +608,7 @@ export class WorkoutService {
 				.limit(1)
 				.for('update');
 			if (!ownedWorkoutExercise || ownedWorkoutExercise.finishedAt)
-				throw new Error('Exercise entry not found.');
+				throw new WorkoutDomainError('Exercise entry not found.');
 
 			const [createdSet] = await tx
 				.insert(set)
@@ -634,7 +644,7 @@ export class WorkoutService {
 				.limit(1)
 				.for('update');
 
-			if (!ownedSet || ownedSet.finishedAt) throw new Error('Set not found.');
+			if (!ownedSet || ownedSet.finishedAt) throw new WorkoutDomainError('Set not found.');
 
 			const existingSets = await tx
 				.select({ id: set.id })
@@ -684,7 +694,7 @@ export class WorkoutService {
 				.limit(1)
 				.for('update');
 
-			if (!ownedSet || ownedSet.finishedAt) throw new Error('Set not found.');
+			if (!ownedSet || ownedSet.finishedAt) throw new WorkoutDomainError('Set not found.');
 			await tx.delete(set).where(eq(set.id, setId));
 
 			const remainingSets = await tx
@@ -716,7 +726,8 @@ export class WorkoutService {
 				.limit(1)
 				.for('update');
 
-			if (!ownedEntry || ownedEntry.finishedAt) throw new Error('Exercise entry not found.');
+			if (!ownedEntry || ownedEntry.finishedAt)
+				throw new WorkoutDomainError('Exercise entry not found.');
 			await tx.delete(workoutExercise).where(eq(workoutExercise.id, workoutExerciseId));
 
 			const remainingExercises = await tx

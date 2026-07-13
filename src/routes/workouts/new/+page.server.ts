@@ -1,3 +1,4 @@
+import { logOperationalFailure } from '$lib/server/operational-log';
 import { workoutService } from '$lib/server/services/workout.service';
 import { createWorkoutSchema } from '$lib/types/workout.validation';
 import { fail, redirect } from '@sveltejs/kit';
@@ -37,7 +38,7 @@ export const actions: Actions = {
 			const newWorkout = await workoutService.createWorkout(locals.user.id, result.data);
 			workoutId = newWorkout.id;
 		} catch (cause) {
-			console.error('Failed to create workout:', cause);
+			logOperationalFailure('workout.create', cause);
 			return fail(500, {
 				success: false,
 				message: 'Could not save the workout. Please try again.',

@@ -196,12 +196,12 @@ export const set = pgTable(
 		setNumber: integer('set_number').notNull(), // e.g., 1, 2, 3
 		reps: integer('reps').notNull(),
 		weight: numeric('weight', { precision: 8, scale: 2, mode: 'number' }),
-		weightUnit: varchar('weight_unit', { length: 10 }).default('kg'), // e.g., 'kg', 'lbs'
+		weightUnit: varchar('weight_unit', { length: 10 }).default('kg').notNull(), // e.g., 'kg', 'lb'
 		actualReps: integer('actual_reps'),
 		actualWeight: numeric('actual_weight', { precision: 8, scale: 2, mode: 'number' }),
 		actualWeightUnit: varchar('actual_weight_unit', { length: 10 }),
 		restTimeSeconds: integer('rest_time_seconds'), // Optional rest time after the set
-		completed: boolean('completed').default(true).notNull(), // Mark if the set was actually done
+		completed: boolean('completed').default(false).notNull(), // Mark if the set was actually done
 		status: varchar('status', { length: 20 })
 			.$type<WorkoutSetStatus>()
 			.default('planned')
@@ -218,6 +218,25 @@ export const set = pgTable(
 		check(
 			'set_result_status_check',
 			sql`(${table.status} = 'completed') = (${table.actualReps} is not null)`
+		),
+		check('set_reps_nonnegative_check', sql`${table.reps} >= 0`),
+		check('set_weight_nonnegative_check', sql`${table.weight} is null or ${table.weight} >= 0`),
+		check(
+			'set_actual_reps_nonnegative_check',
+			sql`${table.actualReps} is null or ${table.actualReps} >= 0`
+		),
+		check(
+			'set_actual_weight_nonnegative_check',
+			sql`${table.actualWeight} is null or ${table.actualWeight} >= 0`
+		),
+		check(
+			'set_rest_time_nonnegative_check',
+			sql`${table.restTimeSeconds} is null or ${table.restTimeSeconds} >= 0`
+		),
+		check('set_weight_unit_check', sql`${table.weightUnit} in ('kg', 'lb')`),
+		check(
+			'set_actual_weight_unit_check',
+			sql`${table.actualWeightUnit} is null or ${table.actualWeightUnit} in ('kg', 'lb')`
 		)
 	]
 );

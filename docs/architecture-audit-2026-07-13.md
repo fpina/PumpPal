@@ -35,24 +35,24 @@ The diagram shows the central issue: nearly every workout use case crosses the s
 
 ## Findings at a glance
 
-| ID | Finding | Impact | Recommendation |
-|---|---|---:|---|
-| A0 | Planned prescription, live execution, and historical record are one mutable model | Very high | Strong |
-| A1 | Training Session rules are spread across five modules | High | Strong |
-| A2 | Workout Builder interface is wide and mixes unrelated change reasons | High | Strong |
-| A3 | Route action modules repeat transport orchestration and erase failure meaning | High | Strong |
-| A4 | Exercise Catalog ownership is undefined and currently global | High | Strong |
-| A5 | Persistence misses core indexes and uses row-at-a-time writes | High as data grows | Strong |
-| A6 | Calendar dates and instants share ad hoc time handling | Medium | Worth exploring |
-| A7 | Large route views contain several behavioral modules in one file | Medium | Worth exploring |
-| A8 | The real workout interface has no direct integration test surface | High | Strong |
-| A9 | Database defaults and constraints do not fully agree | Medium | Strong, small fix |
-| A10 | Storybook is a disconnected starter tree, not an application UI adapter | Low/ongoing | Strong, small deletion |
-| A11 | Schema delivery has two competing workflows and no CI gate | High operationally | Strong |
-| A12 | Domain language and architectural decisions are undocumented | Medium/compounding | Strong |
-| A13 | Exercise/set ordering is an unprotected caller convention | Medium | Strong |
-| A14 | Browser tests lack a deterministic database harness | Medium/compounding | Strong |
-| A15 | `live-workout.ts` is a shallow arithmetic extraction | Low now | Worth exploring |
+| ID  | Finding                                                                           |             Impact | Recommendation         |
+| --- | --------------------------------------------------------------------------------- | -----------------: | ---------------------- |
+| A0  | Planned prescription, live execution, and historical record are one mutable model |          Very high | Strong                 |
+| A1  | Training Session rules are spread across five modules                             |               High | Strong                 |
+| A2  | Workout Builder interface is wide and mixes unrelated change reasons              |               High | Strong                 |
+| A3  | Route action modules repeat transport orchestration and erase failure meaning     |               High | Strong                 |
+| A4  | Exercise Catalog ownership is undefined and currently global                      |               High | Strong                 |
+| A5  | Persistence misses core indexes and uses row-at-a-time writes                     | High as data grows | Strong                 |
+| A6  | Calendar dates and instants share ad hoc time handling                            |             Medium | Worth exploring        |
+| A7  | Large route views contain several behavioral modules in one file                  |             Medium | Worth exploring        |
+| A8  | The real workout interface has no direct integration test surface                 |               High | Strong                 |
+| A9  | Database defaults and constraints do not fully agree                              |             Medium | Strong, small fix      |
+| A10 | Storybook is a disconnected starter tree, not an application UI adapter           |        Low/ongoing | Strong, small deletion |
+| A11 | Schema delivery has two competing workflows and no CI gate                        | High operationally | Strong                 |
+| A12 | Domain language and architectural decisions are undocumented                      | Medium/compounding | Strong                 |
+| A13 | Exercise/set ordering is an unprotected caller convention                         |             Medium | Strong                 |
+| A14 | Browser tests lack a deterministic database harness                               | Medium/compounding | Strong                 |
+| A15 | `live-workout.ts` is a shallow arithmetic extraction                              |            Low now | Worth exploring        |
 
 ## Detailed findings
 
@@ -493,19 +493,19 @@ Pin the floating `postgres` Docker image to a known major/version so local schem
 
 ## Candidate priority matrix
 
-| Candidate | Correctness leverage | Change locality | Test leverage | Effort |
-|---|---:|---:|---:|---:|
-| Plan/performance domain split | Very high | Very high | Very high | High |
-| Training Session module | Very high | Very high | Very high | Medium |
-| Exercise Catalog ownership | High | High | High | Medium–high |
-| Persistence indexes/invariants | High | High | Medium | Low |
-| Workout Builder module | High | Very high | High | Medium |
-| Direct module integration tests | High | High | Very high | Medium |
-| Behavioral UI modules | Medium | High | High | Medium |
-| Temporal model | Medium | High | High | Medium |
-| Delivery path and CI | High operationally | High | High | Medium |
-| Domain glossary/ADRs | Medium | High | Medium | Low |
-| Storybook starter deletion | Low | Medium | Low | Low |
+| Candidate                       | Correctness leverage | Change locality | Test leverage |      Effort |
+| ------------------------------- | -------------------: | --------------: | ------------: | ----------: |
+| Plan/performance domain split   |            Very high |       Very high |     Very high |        High |
+| Training Session module         |            Very high |       Very high |     Very high |      Medium |
+| Exercise Catalog ownership      |                 High |            High |          High | Medium–high |
+| Persistence indexes/invariants  |                 High |            High |        Medium |         Low |
+| Workout Builder module          |                 High |       Very high |          High |      Medium |
+| Direct module integration tests |                 High |            High |     Very high |      Medium |
+| Behavioral UI modules           |               Medium |            High |          High |      Medium |
+| Temporal model                  |               Medium |            High |          High |      Medium |
+| Delivery path and CI            |   High operationally |            High |          High |      Medium |
+| Domain glossary/ADRs            |               Medium |            High |        Medium |         Low |
+| Storybook starter deletion      |                  Low |          Medium |           Low |         Low |
 
 ## Audit method and limits
 

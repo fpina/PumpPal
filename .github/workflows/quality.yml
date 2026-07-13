@@ -1,0 +1,42 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.4
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: mysecretpassword
+          POSTGRES_DB: pumppal
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U root -d pumppal"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://root:mysecretpassword@localhost:5432/pumppal
+      AUTH_SECRET: ci-auth-secret-with-at-least-32-characters
+      BETTER_AUTH_URL: http://localhost:4173
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Apply migrations to an empty database
+        run: npm run db:migrate
+      - run: npm run check
+      - run: npm run lint
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test
+      - run: npm run build
