@@ -41,7 +41,7 @@ test('an athlete can edit and delete their workout log while other users cannot 
 	await page.getByLabel('Weight').fill('70');
 	await page.getByLabel('Rest').fill('90');
 	await page.getByRole('button', { name: 'Add set' }).click();
-	await expect(page.getByText('70 kg')).toBeVisible();
+	await expect(page.getByText('Set Target: 8 reps · 70 kg')).toBeVisible();
 
 	await page.getByText('Edit workout details').click();
 	await page.getByLabel('Workout name').fill('Heavy push updated');
@@ -55,8 +55,7 @@ test('an athlete can edit and delete their workout log while other users cannot 
 	await editSetForm.getByLabel('Reps').fill('10');
 	await editSetForm.getByLabel('Weight').fill('72.5');
 	await page.getByRole('button', { name: 'Save set' }).click();
-	await expect(page.getByText('72.5 kg')).toBeVisible();
-	await expect(page.getByText('10', { exact: true })).toBeVisible();
+	await expect(page.getByText('Set Target: 10 reps · 72.5 kg')).toBeVisible();
 
 	page.once('dialog', (dialog) => dialog.accept());
 	await page.getByRole('button', { name: 'Delete set' }).click();
@@ -65,7 +64,7 @@ test('an athlete can edit and delete their workout log while other users cannot 
 	await page.getByLabel('Reps').fill('6');
 	await page.getByLabel('Weight').fill('60');
 	await page.getByRole('button', { name: 'Add set' }).click();
-	await expect(page.getByText('60 kg')).toBeVisible();
+	await expect(page.getByText('Set Target: 6 reps · 60 kg')).toBeVisible();
 	page.once('dialog', (dialog) => dialog.accept());
 	await page.getByRole('button', { name: 'Remove' }).click();
 	await expect(page.getByText('Build your first movement')).toBeVisible();
@@ -75,7 +74,7 @@ test('an athlete can edit and delete their workout log while other users cannot 
 	await page.getByLabel('Reps').fill('5');
 	await page.getByLabel('Weight').fill('80');
 	await page.getByRole('button', { name: 'Add set' }).click();
-	await expect(page.getByText('80 kg')).toBeVisible();
+	await expect(page.getByText('Set Target: 5 reps · 80 kg')).toBeVisible();
 	page.once('dialog', (dialog) => dialog.accept());
 	await page.getByRole('button', { name: 'Delete workout' }).click();
 	await expect(page).toHaveURL('/');

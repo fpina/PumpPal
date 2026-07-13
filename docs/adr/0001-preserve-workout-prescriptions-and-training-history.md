@@ -1,0 +1,7 @@
+# Preserve workout prescriptions and segmented training history
+
+PumpPal stores Set Targets separately from Set Results so performing a Training Session never destroys its Workout Prescription, and repetition copies targets rather than accidental results. Reopening a finished Training Session retains its original `startedAt`, first `finishedAt`, and Set Results, then begins a new Training Segment whose active duration is added to the session total. Each Training Segment records its own boundary, so later resumptions cannot replace earlier timing history.
+
+Reopening is an append-only continuation, not a correction workflow: completed Set Results remain unavailable for activation or editing. Correcting a result will require an explicit revision model in a separate change; PumpPal does not silently mutate historical results in the meantime.
+
+For existing data, the migration interprets every completed legacy set's reps/load as both its Set Target and Set Result because the old model stored only one value. Planned and skipped legacy sets receive no Set Result. Every legacy Training Session with `startedAt` becomes one Training Segment; an active segment remains open, while a finished segment copies the known finish and duration. We rejected overwriting target fields and reconstructing `startedAt` because both approaches erase facts required by repetition, correction, progress analysis, and auditability.

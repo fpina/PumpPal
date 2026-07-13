@@ -1,0 +1,3 @@
+ALTER TABLE "set" ADD CONSTRAINT "set_result_status_check" CHECK (("set"."status" = 'completed') = ("set"."actual_reps" is not null));--> statement-breakpoint
+ALTER TABLE "training_segment" ADD CONSTRAINT "training_segment_completion_check" CHECK (("training_segment"."finished_at" is null and "training_segment"."duration_seconds" is null) or ("training_segment"."finished_at" is not null and "training_segment"."duration_seconds" >= 0 and "training_segment"."finished_at" >= "training_segment"."started_at"));--> statement-breakpoint
+ALTER TABLE "workout" ADD CONSTRAINT "workout_active_started_at_check" CHECK (("workout"."session_status" = 'active') = ("workout"."active_started_at" is not null));
