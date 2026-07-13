@@ -1,27 +1,12 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
-async function register(page: Page, suffix: string) {
-	const email = `live-${suffix}@example.com`;
-	await page.goto('/auth/register');
-	await page.getByLabel('Name').fill('Live Training Athlete');
-	await page.getByLabel('Email address').fill(email);
-	await page.getByLabel('Password', { exact: true }).fill('correct-horse-42');
-	await page.getByLabel('Confirm password').fill('correct-horse-42');
-	await page.getByRole('button', { name: 'Create account' }).click();
-	await page.waitForLoadState('networkidle');
-	if (new URL(page.url()).pathname !== '/') {
-		await page.goto('/auth');
-		await page.getByLabel('Email address').fill(email);
-		await page.getByLabel('Password').fill('correct-horse-42');
-		await page.getByRole('button', { name: 'Sign in' }).click();
-	}
-	await expect(page).toHaveURL('/');
-}
-
-test('an Athlete can run, resume, finish, and reopen a Training Session', async ({ page }) => {
+test('an Athlete can run, resume, finish, and reopen a Training Session', async ({
+	page,
+	athlete
+}) => {
 	test.setTimeout(60_000);
 	const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-	await register(page, suffix);
+	await athlete.register({ name: 'Live Training Athlete', emailPrefix: `live-${suffix}` });
 
 	await page.getByRole('link', { name: /New workout/i }).click();
 	await page.getByLabel('Workout name').fill('Live strength session');

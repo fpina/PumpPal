@@ -1,30 +1,13 @@
-import { expect, test } from '@playwright/test';
-
-async function register(page: import('@playwright/test').Page, suffix: string) {
-	const email = `issue-two-${suffix}@example.com`;
-	await page.goto('/auth/register');
-	await page.getByLabel('Name').fill('Issue Two Athlete');
-	await page.getByLabel('Email address').fill(email);
-	await page.getByLabel('Password', { exact: true }).fill('correct-horse-42');
-	await page.getByLabel('Confirm password').fill('correct-horse-42');
-	await page.getByRole('button', { name: 'Create account' }).click();
-	await page.waitForLoadState('networkidle');
-	if (new URL(page.url()).pathname !== '/') {
-		await page.goto('/auth');
-		await page.getByLabel('Email address').fill(email);
-		await page.getByLabel('Password').fill('correct-horse-42');
-		await page.getByRole('button', { name: 'Sign in' }).click();
-	}
-	await expect(page).toHaveURL('/');
-}
+import { expect, test } from './fixtures';
 
 test('an athlete can edit and delete their workout log while other users cannot access it', async ({
-	page
+	page,
+	athlete
 }) => {
 	test.setTimeout(60_000);
 	const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 	const ownerSuffix = `${suffix}-owner`;
-	await register(page, ownerSuffix);
+	await athlete.register({ name: 'Issue Two Athlete', emailPrefix: `issue-two-${ownerSuffix}` });
 
 	await page.getByRole('link', { name: /New workout/i }).click();
 	await page.getByLabel('Workout name').fill('Heavy push');
@@ -98,7 +81,10 @@ test('an athlete can edit and delete their workout log while other users cannot 
 		.inputValue();
 
 	await page.getByRole('button', { name: 'Sign out' }).click();
-	await register(page, `${suffix}-outsider`);
+	await athlete.register({
+		name: 'Issue Two Athlete',
+		emailPrefix: `issue-two-${suffix}-outsider`
+	});
 
 	const actionHeaders = {
 		accept: 'application/json',

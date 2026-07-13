@@ -1,43 +1,25 @@
 import { randomUUID } from 'node:crypto';
-import { db } from '$lib/server/db';
-import { exercise, user } from '$lib/server/db/schema';
-import { eq } from 'drizzle-orm';
-import { describe, expect, it } from 'vitest';
+import { databaseTest } from '../../../../tests/harness/integration';
+import { describe, expect } from 'vitest';
 import { workoutService } from './workout.service';
 
 describe('WorkoutService training records', () => {
-	it('preserves its prescription, first finish, and results across repeat and reopen', async () => {
-		const suffix = randomUUID();
-		const userId = `integration-${suffix}`;
-		let exerciseId: number | undefined;
+	databaseTest(
+		'preserves its prescription, first finish, and results across repeat and reopen',
+		async ({ harness }) => {
+			const suffix = randomUUID();
+			const athlete = await harness.athlete({ name: 'Integration Athlete' });
+			const createdExercise = await harness.catalogExercise(`Integration press ${suffix}`);
 
-		try {
-			await db.insert(user).values({
-				id: userId,
-				name: 'Integration Athlete',
-				email: `${userId}@example.com`,
-				emailVerified: true,
-				createdAt: new Date(),
-				updatedAt: new Date()
-			});
-			const [createdExercise] = await db
-				.insert(exercise)
-				.values({
-					name: `Integration press ${suffix}`,
-					normalizedName: `integration press ${suffix}`
-				})
-				.returning({ id: exercise.id });
-			exerciseId = createdExercise.id;
-
-			const createdWorkout = await workoutService.createWorkout(userId, {
+			const createdWorkout = await workoutService.createWorkout(athlete.id, {
 				name: 'Prescription preservation',
 				date: '2026-07-13'
 			});
-			const workoutEntry = await workoutService.addExerciseToWorkout(userId, {
+			const workoutEntry = await workoutService.addExerciseToWorkout(athlete.id, {
 				workoutId: createdWorkout.id,
-				exerciseId
+				exerciseId: createdExercise.id
 			});
-			const targetSet = await workoutService.addSetToWorkoutExercise(userId, {
+			const targetSet = await workoutService.addSetToWorkoutExercise(athlete.id, {
 				workoutExerciseId: workoutEntry.id,
 				setNumber: 1,
 				reps: 8,
@@ -46,17 +28,17 @@ describe('WorkoutService training records', () => {
 				completed: false
 			});
 
-			await workoutService.startWorkout(userId, createdWorkout.id);
-			await workoutService.activateSet(userId, createdWorkout.id, targetSet.id);
-			await workoutService.completeLiveSet(userId, createdWorkout.id, {
+			await workoutService.startWorkout(athlete.id, createdWorkout.id);
+			await workoutService.activateSet(athlete.id, createdWorkout.id, targetSet.id);
+			await workoutService.completeLiveSet(athlete.id, createdWorkout.id, {
 				setId: targetSet.id,
 				reps: 9,
 				weight: 102.5,
 				weightUnit: 'kg'
 			});
-			await workoutService.finishWorkout(userId, createdWorkout.id);
+			await workoutService.finishWorkout(athlete.id, createdWorkout.id);
 
-			const firstFinish = await workoutService.getWorkoutById(userId, createdWorkout.id);
+			const firstFinish = await workoutService.getWorkoutById(athlete.id, createdWorkout.id);
 			expect(firstFinish?.workoutExercises[0].sets[0]).toMatchObject({
 				reps: 8,
 				weight: 100,
@@ -67,12 +49,12 @@ describe('WorkoutService training records', () => {
 			const originalFinishedAt = firstFinish?.finishedAt;
 			const originalSegment = firstFinish?.trainingSegments[0];
 
-			const repeated = await workoutService.repeatWorkout(userId, {
+			const repeated = await workoutService.repeatWorkout(athlete.id, {
 				workoutId: createdWorkout.id,
 				repeatToken: randomUUID(),
 				date: '2026-07-14'
 			});
-			const repeatedWorkout = await workoutService.getWorkoutById(userId, repeated.id);
+			const repeatedWorkout = await workoutService.getWorkoutById(athlete.id, repeated.id);
 			expect(repeatedWorkout?.workoutExercises[0].sets[0]).toMatchObject({
 				reps: 8,
 				weight: 100,
@@ -80,12 +62,12 @@ describe('WorkoutService training records', () => {
 				actualWeight: null
 			});
 
-			await workoutService.reopenWorkout(userId, createdWorkout.id);
+			await workoutService.reopenWorkout(athlete.id, createdWorkout.id);
 			await expect(
-				workoutService.activateSet(userId, createdWorkout.id, targetSet.id)
+				workoutService.activateSet(athlete.id, createdWorkout.id, targetSet.id)
 			).rejects.toThrow('Set is not available.');
 			await expect(
-				workoutService.updateSet(userId, {
+				workoutService.updateSet(athlete.id, {
 					workoutExerciseId: workoutEntry.id,
 					setId: targetSet.id,
 					setNumber: 1,
@@ -95,12 +77,12 @@ describe('WorkoutService training records', () => {
 					completed: true
 				})
 			).rejects.toThrow('Set not found.');
-			await expect(workoutService.deleteSet(userId, targetSet.id)).rejects.toThrow(
+			await expect(workoutService.deleteSet(athlete.id, targetSet.id)).rejects.toThrow(
 				'Set not found.'
 			);
-			await workoutService.finishWorkout(userId, createdWorkout.id);
+			await workoutService.finishWorkout(athlete.id, createdWorkout.id);
 
-			const resumed = await workoutService.getWorkoutById(userId, createdWorkout.id);
+			const resumed = await workoutService.getWorkoutById(athlete.id, createdWorkout.id);
 			expect(resumed?.finishedAt).toEqual(originalFinishedAt);
 			expect(resumed?.trainingSegments).toHaveLength(2);
 			expect(resumed?.trainingSegments[0]).toEqual(originalSegment);
@@ -108,9 +90,65 @@ describe('WorkoutService training records', () => {
 				reps: 8,
 				actualReps: 9
 			});
-		} finally {
-			await db.delete(user).where(eq(user.id, userId));
-			if (exerciseId) await db.delete(exercise).where(eq(exercise.id, exerciseId));
 		}
-	});
+	);
+
+	databaseTest(
+		'commits one ordered Workout Prescription for concurrent repeat requests',
+		async ({ harness }) => {
+			const athlete = await harness.athlete();
+			const firstExercise = await harness.catalogExercise('Harness deadlift');
+			const secondExercise = await harness.catalogExercise('Harness row');
+			const source = await workoutService.createWorkout(athlete.id, {
+				name: 'Ordered pull day',
+				date: '2026-07-13'
+			});
+			const secondEntry = await workoutService.addExerciseToWorkout(athlete.id, {
+				workoutId: source.id,
+				exerciseId: secondExercise.id,
+				order: 2
+			});
+			const firstEntry = await workoutService.addExerciseToWorkout(athlete.id, {
+				workoutId: source.id,
+				exerciseId: firstExercise.id,
+				order: 1
+			});
+			await workoutService.addSetToWorkoutExercise(athlete.id, {
+				workoutExerciseId: firstEntry.id,
+				setNumber: 2,
+				reps: 5,
+				completed: false
+			});
+			await workoutService.addSetToWorkoutExercise(athlete.id, {
+				workoutExerciseId: firstEntry.id,
+				setNumber: 1,
+				reps: 8,
+				completed: false
+			});
+			await workoutService.addSetToWorkoutExercise(athlete.id, {
+				workoutExerciseId: secondEntry.id,
+				setNumber: 1,
+				reps: 10,
+				completed: false
+			});
+
+			const repeatToken = randomUUID();
+			const repeat = () =>
+				workoutService.repeatWorkout(athlete.id, {
+					workoutId: source.id,
+					repeatToken,
+					date: '2026-07-14'
+				});
+			const [firstRepeat, duplicateRepeat] = await Promise.all([repeat(), repeat()]);
+
+			expect(duplicateRepeat.id).toBe(firstRepeat.id);
+			const repeated = await workoutService.getWorkoutById(athlete.id, firstRepeat.id);
+			expect(repeated?.workoutExercises.map(({ exercise }) => exercise.name)).toEqual([
+				'Harness deadlift',
+				'Harness row'
+			]);
+			expect(repeated?.workoutExercises[0].sets.map(({ reps }) => reps)).toEqual([8, 5]);
+			expect(repeated?.workoutExercises[1].sets.map(({ reps }) => reps)).toEqual([10]);
+		}
+	);
 });

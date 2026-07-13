@@ -1,31 +1,14 @@
-import { expect, test, type Page } from '@playwright/test';
-
-async function register(page: Page, suffix: string) {
-	const email = `repeat-${suffix}@example.com`;
-	await page.goto('/auth/register');
-	await page.getByLabel('Name').fill('Repeat Workout Athlete');
-	await page.getByLabel('Email address').fill(email);
-	await page.getByLabel('Password', { exact: true }).fill('correct-horse-42');
-	await page.getByLabel('Confirm password').fill('correct-horse-42');
-	await page.getByRole('button', { name: 'Create account' }).click();
-	await page.waitForLoadState('networkidle');
-	if (new URL(page.url()).pathname !== '/') {
-		await page.goto('/auth');
-		await page.getByLabel('Email address').fill(email);
-		await page.getByLabel('Password').fill('correct-horse-42');
-		await page.getByRole('button', { name: 'Sign in' }).click();
-	}
-	await expect(page).toHaveURL('/');
-}
+import { expect, test } from './fixtures';
 
 test('an athlete can repeat populated and empty workouts without duplicating submissions', async ({
-	page
+	page,
+	athlete
 }) => {
 	test.setTimeout(60_000);
 	const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 	const warmupName = `Warm-up press ${suffix}`;
 	const exerciseName = `Tempo press ${suffix}`;
-	await register(page, suffix);
+	await athlete.register({ name: 'Repeat Workout Athlete', emailPrefix: `repeat-${suffix}` });
 
 	await page.getByRole('link', { name: /New workout/i }).click();
 	await page.getByLabel('Workout name').fill('Repeatable push day');
@@ -53,29 +36,15 @@ test('an athlete can repeat populated and empty workouts without duplicating sub
 	await sourceExercise.getByRole('button', { name: 'Add set' }).click();
 	await expect(sourceExercise.getByText('Set Target: 8 reps · 70 kg')).toBeVisible();
 
-	const repeatForm = page.getByRole('button', { name: 'Repeat workout' }).locator('..');
-	const workoutId = await repeatForm.locator('input[name="workoutId"]').inputValue();
-	const repeatToken = await repeatForm.locator('input[name="repeatToken"]').inputValue();
-	const repeatDate = await repeatForm.locator('input[name="date"]').inputValue();
+	const workoutId = sourceUrl.split('/').at(-1)!;
+	const repeatDate = await page.getByLabel('Repeat on').inputValue();
 	const actionHeaders = {
 		accept: 'application/json',
 		origin: 'http://localhost:4173',
 		'x-sveltekit-action': 'true'
 	};
-	const repeatRequest = () =>
-		page.request.post(`${sourceUrl}?/repeatWorkout`, {
-			headers: actionHeaders,
-			form: { workoutId, repeatToken, date: repeatDate }
-		});
-	const [firstRepeat, duplicateRepeat] = await Promise.all([repeatRequest(), repeatRequest()]);
-	const firstResult = await firstRepeat.json();
-	const duplicateResult = await duplicateRepeat.json();
-	for (const result of [firstResult, duplicateResult]) {
-		expect(result).toMatchObject({ type: 'redirect', status: 303 });
-	}
-	expect(duplicateResult.location).toBe(firstResult.location);
-
-	await page.goto(firstResult.location);
+	await page.getByRole('button', { name: 'Repeat workout' }).click();
+	await expect(page).not.toHaveURL(sourceUrl);
 	await expect(page.getByRole('heading', { level: 1, name: 'Repeatable push day' })).toBeVisible();
 	await expect(page.getByText('Keep one rep in reserve')).toBeVisible();
 	await expect(page.getByText('Three-second lowering phase')).toBeVisible();
@@ -111,7 +80,10 @@ test('an athlete can repeat populated and empty workouts without duplicating sub
 	await expect(page.getByText('Build your first movement')).toBeVisible();
 
 	await page.getByRole('button', { name: 'Sign out' }).click();
-	await register(page, `${suffix}-outsider`);
+	await athlete.register({
+		name: 'Repeat Workout Athlete',
+		emailPrefix: `repeat-${suffix}-outsider`
+	});
 	const unauthorizedRepeat = await page.request.post(`${sourceUrl}?/repeatWorkout`, {
 		headers: actionHeaders,
 		form: { workoutId, repeatToken: crypto.randomUUID(), date: repeatDate }

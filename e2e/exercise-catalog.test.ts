@@ -1,22 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
-
-async function registerAthlete(page: Page, identity: string) {
-	const email = `catalog-${identity}@example.com`;
-	await page.goto('/auth/register');
-	await page.getByLabel('Name').fill('Catalog Athlete');
-	await page.getByLabel('Email address').fill(email);
-	await page.getByLabel('Password', { exact: true }).fill('correct-horse-42');
-	await page.getByLabel('Confirm password').fill('correct-horse-42');
-	await page.getByRole('button', { name: 'Create account' }).click();
-	await page.waitForLoadState('networkidle');
-	if (new URL(page.url()).pathname !== '/') {
-		await page.goto('/auth');
-		await page.getByLabel('Email address').fill(email);
-		await page.getByLabel('Password').fill('correct-horse-42');
-		await page.getByRole('button', { name: 'Sign in' }).click();
-	}
-	await expect(page).toHaveURL('/');
-}
+import { expect, test } from './fixtures';
 
 async function createWorkoutPrescription(page: Page, name: string) {
 	await page.getByRole('link', { name: /New workout/i }).click();
@@ -25,11 +7,11 @@ async function createWorkoutPrescription(page: Page, name: string) {
 	await expect(page).toHaveURL(/\/workouts\/\d+$/);
 }
 
-test('a Custom Exercise is visible only to its owning Athlete', async ({ page }) => {
+test('a Custom Exercise is visible only to its owning Athlete', async ({ page, athlete }) => {
 	const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 	const customExercise = `Private press ${suffix}`;
 
-	await registerAthlete(page, `${suffix}-owner`);
+	await athlete.register({ name: 'Catalog Athlete', emailPrefix: `catalog-${suffix}-owner` });
 	await createWorkoutPrescription(page, 'Owner prescription');
 	await page.getByLabel('Exercise name').fill(customExercise);
 	await page.getByRole('button', { name: 'Create & add' }).click();
@@ -41,7 +23,7 @@ test('a Custom Exercise is visible only to its owning Athlete', async ({ page })
 	expect(ownerExerciseId).not.toBeNull();
 
 	await page.getByRole('button', { name: 'Sign out' }).click();
-	await registerAthlete(page, `${suffix}-other`);
+	await athlete.register({ name: 'Catalog Athlete', emailPrefix: `catalog-${suffix}-other` });
 	await createWorkoutPrescription(page, 'Other prescription');
 	await expect(
 		page.getByLabel('Choose exercise').locator('option', { hasText: customExercise })

@@ -5,6 +5,7 @@ import { defineConfig } from 'vite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { storybookTest } from '@storybook/experimental-addon-test/vitest-plugin';
+import { databaseUrlFor } from './tests/harness/environment';
 const dirname =
 	typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
 
@@ -30,8 +31,22 @@ export default defineConfig({
 				test: {
 					name: 'server',
 					environment: 'node',
-					include: ['src/**/*.{test,spec}.{js,ts}'],
-					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
+					include: ['src/**/*.{test,spec}.{js,ts}', 'tests/harness/**/*.{test,spec}.{js,ts}'],
+					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}', '**/*.integration.{test,spec}.{js,ts}']
+				}
+			},
+			{
+				extends: './vite.config.ts',
+				test: {
+					name: 'integration',
+					environment: 'node',
+					env: { PUMPPAL_TEST_DATABASE_URL: databaseUrlFor('integration') },
+					include: [
+						'src/**/*.integration.{test,spec}.{js,ts}',
+						'tests/**/*.integration.{test,spec}.{js,ts}'
+					],
+					globalSetup: ['./tests/harness/vitest-global-setup.ts'],
+					setupFiles: ['./tests/harness/vitest-setup.ts']
 				}
 			},
 			{
