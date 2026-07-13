@@ -56,6 +56,7 @@ test('an athlete can repeat populated and empty workouts without duplicating sub
 	const repeatForm = page.getByRole('button', { name: 'Repeat workout' }).locator('..');
 	const workoutId = await repeatForm.locator('input[name="workoutId"]').inputValue();
 	const repeatToken = await repeatForm.locator('input[name="repeatToken"]').inputValue();
+	const repeatDate = await repeatForm.locator('input[name="date"]').inputValue();
 	const actionHeaders = {
 		accept: 'application/json',
 		origin: 'http://localhost:4173',
@@ -64,7 +65,7 @@ test('an athlete can repeat populated and empty workouts without duplicating sub
 	const repeatRequest = () =>
 		page.request.post(`${sourceUrl}?/repeatWorkout`, {
 			headers: actionHeaders,
-			form: { workoutId, repeatToken }
+			form: { workoutId, repeatToken, date: repeatDate }
 		});
 	const [firstRepeat, duplicateRepeat] = await Promise.all([repeatRequest(), repeatRequest()]);
 	const firstResult = await firstRepeat.json();
@@ -113,7 +114,7 @@ test('an athlete can repeat populated and empty workouts without duplicating sub
 	await register(page, `${suffix}-outsider`);
 	const unauthorizedRepeat = await page.request.post(`${sourceUrl}?/repeatWorkout`, {
 		headers: actionHeaders,
-		form: { workoutId, repeatToken: crypto.randomUUID() }
+		form: { workoutId, repeatToken: crypto.randomUUID(), date: repeatDate }
 	});
 	expect(await unauthorizedRepeat.json()).toMatchObject({ type: 'failure', status: 404 });
 	await page.goto(sourceUrl);

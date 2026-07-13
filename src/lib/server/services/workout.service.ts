@@ -77,7 +77,7 @@ export class WorkoutService {
 			.values({
 				userId,
 				name: workoutData.name || null,
-				date: new Date(`${workoutData.date}T12:00:00`),
+				date: workoutData.date,
 				notes: workoutData.notes || null
 			})
 			.returning({ id: workout.id });
@@ -419,7 +419,7 @@ export class WorkoutService {
 			.update(workout)
 			.set({
 				name: data.name || null,
-				date: new Date(`${data.date}T12:00:00`),
+				date: data.date,
 				notes: data.notes || null
 			})
 			.where(
@@ -457,17 +457,12 @@ export class WorkoutService {
 			});
 
 			if (!sourceWorkout) throw new Error('Workout not found.');
-			const now = new Date();
-			const todayAtNoonUtc = new Date(
-				Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12)
-			);
-
 			const [createdWorkout] = await tx
 				.insert(workout)
 				.values({
 					userId,
 					name: sourceWorkout.name,
-					date: todayAtNoonUtc,
+					date: data.date,
 					notes: sourceWorkout.notes,
 					repeatToken: data.repeatToken
 				})

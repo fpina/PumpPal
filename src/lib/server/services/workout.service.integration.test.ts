@@ -69,7 +69,8 @@ describe('WorkoutService training records', () => {
 
 			const repeated = await workoutService.repeatWorkout(userId, {
 				workoutId: createdWorkout.id,
-				repeatToken: randomUUID()
+				repeatToken: randomUUID(),
+				date: '2026-07-14'
 			});
 			const repeatedWorkout = await workoutService.getWorkoutById(userId, repeated.id);
 			expect(repeatedWorkout?.workoutExercises[0].sets[0]).toMatchObject({

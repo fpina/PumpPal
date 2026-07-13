@@ -72,7 +72,8 @@ export const workoutMutationSchema = z.object({
 });
 
 export const repeatWorkoutSchema = workoutMutationSchema.extend({
-	repeatToken: z.string().uuid('Repeat request is invalid.')
+	repeatToken: z.string().uuid('Repeat request is invalid.'),
+	date: createWorkoutSchema.shape.date
 });
 
 export const liveSetSchema = setMutationSchema.extend({

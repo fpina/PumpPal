@@ -4,6 +4,7 @@ import {
 	text,
 	integer,
 	numeric,
+	date,
 	timestamp,
 	boolean,
 	varchar,
@@ -118,18 +119,18 @@ export const workout = pgTable(
 			.notNull()
 			.references(() => user.id, { onDelete: 'cascade' }), // Link to the user
 		name: varchar('name', { length: 255 }), // Optional name like "Monday Chest Day"
-		date: timestamp('date').notNull(), // When the workout occurred
+		date: date('date', { mode: 'string' }).notNull(),
 		notes: text('notes'), // General notes for the workout session
 		repeatToken: text('repeat_token'),
 		sessionStatus: varchar('session_status', { length: 20 })
 			.$type<WorkoutSessionStatus>()
 			.default('planned')
 			.notNull(),
-		startedAt: timestamp('started_at'),
-		activeStartedAt: timestamp('active_started_at'),
-		finishedAt: timestamp('finished_at'),
+		startedAt: timestamp('started_at', { withTimezone: true }),
+		activeStartedAt: timestamp('active_started_at', { withTimezone: true }),
+		finishedAt: timestamp('finished_at', { withTimezone: true }),
 		durationSeconds: integer('duration_seconds'),
-		restEndsAt: timestamp('rest_ends_at'),
+		restEndsAt: timestamp('rest_ends_at', { withTimezone: true }),
 		createdAt: timestamp('created_at').defaultNow().notNull()
 	},
 	(table) => [
@@ -205,7 +206,7 @@ export const set = pgTable(
 			.$type<WorkoutSetStatus>()
 			.default('planned')
 			.notNull(),
-		completedAt: timestamp('completed_at'),
+		completedAt: timestamp('completed_at', { withTimezone: true }),
 		createdAt: timestamp('created_at').defaultNow().notNull()
 	},
 	(table) => [
@@ -239,8 +240,8 @@ export const trainingSegment = pgTable(
 		workoutId: integer('workout_id')
 			.notNull()
 			.references(() => workout.id, { onDelete: 'cascade' }),
-		startedAt: timestamp('started_at').notNull(),
-		finishedAt: timestamp('finished_at'),
+		startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+		finishedAt: timestamp('finished_at', { withTimezone: true }),
 		durationSeconds: integer('duration_seconds'),
 		createdAt: timestamp('created_at').defaultNow().notNull()
 	},

@@ -1,17 +1,18 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { currentWorkoutDate, formatWorkoutDate } from '$lib/workout-date';
+	import { onMount } from 'svelte';
 
 	let { data, form } = $props();
 	let repeating = $state(false);
+	let repeatDate = $state('');
 
-	const dateFormatter = new Intl.DateTimeFormat(undefined, {
-		year: 'numeric',
-		month: 'long',
-		day: 'numeric'
-	});
-
-	const workoutDate = $derived(new Date(data.workout.date).toISOString().slice(0, 10));
+	const workoutDate = $derived(data.workout.date);
 	const historyLocked = $derived(data.workout.finishedAt !== null);
+
+	onMount(() => {
+		repeatDate = currentWorkoutDate();
+	});
 
 	function confirmSubmission(event: SubmitEvent, message: string) {
 		if (!window.confirm(message)) event.preventDefault();
@@ -24,7 +25,7 @@
 	<section class="sport-stripe surface px-6 py-8 sm:px-9 sm:py-10">
 		<div class="relative z-10 flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
 			<div class="max-w-3xl">
-				<p class="eyebrow">{dateFormatter.format(new Date(data.workout.date))}</p>
+				<p class="eyebrow">{formatWorkoutDate(data.workout.date, undefined, 'long')}</p>
 				<h1 class="page-title mt-5">{data.workout.name || 'Untitled workout'}</h1>
 				{#if data.workout.notes}<p
 						class="mt-5 max-w-2xl whitespace-pre-wrap text-sm leading-6 text-[#92a49b]"
@@ -71,7 +72,16 @@
 				>
 					<input type="hidden" name="workoutId" value={data.workout.id} />
 					<input type="hidden" name="repeatToken" value={data.repeatToken} />
-					<button type="submit" disabled={repeating} class="button-primary min-w-44">
+					<label class="field-label" for="repeat-date">Repeat on</label>
+					<input
+						id="repeat-date"
+						type="date"
+						name="date"
+						bind:value={repeatDate}
+						required
+						class="field-control mb-2 !min-h-10 !py-2"
+					/>
+					<button type="submit" disabled={repeating || !repeatDate} class="button-primary min-w-44">
 						{repeating ? 'Building workout…' : 'Repeat workout'}
 					</button>
 				</form>
@@ -115,7 +125,7 @@
 					/>
 				</div>
 				<div>
-					<label for="workout-date" class="field-label">Date</label>
+					<label for="workout-date" class="field-label">Workout Date</label>
 					<input
 						id="workout-date"
 						type="date"

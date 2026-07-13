@@ -1,11 +1,7 @@
 <script lang="ts">
-	let { data } = $props();
+	import { formatWorkoutDate } from '$lib/workout-date';
 
-	const dateFormatter = new Intl.DateTimeFormat(undefined, {
-		year: 'numeric',
-		month: 'short',
-		day: 'numeric'
-	});
+	let { data } = $props();
 </script>
 
 <div class="space-y-10">
@@ -78,7 +74,7 @@
 							<p
 								class="m-0 text-[0.68rem] font-extrabold uppercase tracking-[0.14em] text-[#3ee8cf]"
 							>
-								{dateFormatter.format(new Date(workout.date))}
+								{formatWorkoutDate(workout.date)}
 							</p>
 							<h3 class="mt-2 text-xl font-black tracking-tight">
 								{workout.name || 'Untitled workout'}
