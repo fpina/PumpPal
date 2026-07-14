@@ -152,6 +152,335 @@ describe('Workout Builder', () => {
 		}
 	);
 
+	databaseTest(
+		'inserts a Prescription Exercise in the middle and keeps sibling order contiguous',
+		async ({ harness }) => {
+			const athlete = await harness.athlete();
+			const squat = await harness.catalogExercise('Ordered squat');
+			const press = await harness.catalogExercise('Ordered press');
+			const row = await harness.catalogExercise('Ordered row');
+			const created = await workoutBuilder.execute(athlete.id, {
+				type: 'create_prescription',
+				name: 'Ordered prescription',
+				date: '2026-07-14'
+			});
+			if (!created.ok || created.command !== 'create_prescription') {
+				throw new Error('Unexpected command outcome.');
+			}
+
+			for (const [exerciseId, order] of [
+				[squat.id, 1],
+				[row.id, 2],
+				[press.id, 2]
+			] as const) {
+				const outcome = await workoutBuilder.execute(athlete.id, {
+					type: 'add_prescription_exercise',
+					prescriptionId: created.prescriptionId,
+					exerciseId,
+					order
+				});
+				expect(outcome.ok).toBe(true);
+			}
+
+			const prescription = await trainingSession.get(athlete.id, created.prescriptionId);
+			expect(
+				prescription?.workoutExercises.map(({ exercise, order }) => [exercise.name, order])
+			).toEqual([
+				['Ordered squat', 1],
+				['Ordered press', 2],
+				['Ordered row', 3]
+			]);
+		}
+	);
+
+	databaseTest(
+		'inserts a Set Target in the middle and keeps sibling numbering contiguous',
+		async ({ harness }) => {
+			const athlete = await harness.athlete();
+			const catalogExercise = await harness.catalogExercise('Ordered targets');
+			const created = await workoutBuilder.execute(athlete.id, {
+				type: 'create_prescription',
+				name: 'Ordered targets',
+				date: '2026-07-14'
+			});
+			if (!created.ok || created.command !== 'create_prescription') {
+				throw new Error('Unexpected command outcome.');
+			}
+			const addedExercise = await workoutBuilder.execute(athlete.id, {
+				type: 'add_prescription_exercise',
+				prescriptionId: created.prescriptionId,
+				exerciseId: catalogExercise.id
+			});
+			if (!addedExercise.ok || addedExercise.command !== 'add_prescription_exercise') {
+				throw new Error('Unexpected command outcome.');
+			}
+
+			for (const [reps, setNumber] of [
+				[5, 1],
+				[15, 2],
+				[10, 2]
+			] as const) {
+				const outcome = await workoutBuilder.execute(athlete.id, {
+					type: 'add_set_target',
+					prescriptionExerciseId: addedExercise.prescriptionExerciseId,
+					setNumber,
+					reps
+				});
+				expect(outcome.ok).toBe(true);
+			}
+
+			const prescription = await trainingSession.get(athlete.id, created.prescriptionId);
+			expect(
+				prescription?.workoutExercises[0].sets.map(({ reps, setNumber }) => [reps, setNumber])
+			).toEqual([
+				[5, 1],
+				[10, 2],
+				[15, 3]
+			]);
+		}
+	);
+
+	databaseTest(
+		'inserts a Custom Exercise in the middle of a Workout Prescription',
+		async ({ harness }) => {
+			const athlete = await harness.athlete();
+			const squat = await harness.catalogExercise('Custom order squat');
+			const row = await harness.catalogExercise('Custom order row');
+			const created = await workoutBuilder.execute(athlete.id, {
+				type: 'create_prescription',
+				name: 'Custom order prescription',
+				date: '2026-07-14'
+			});
+			if (!created.ok || created.command !== 'create_prescription') {
+				throw new Error('Unexpected command outcome.');
+			}
+			for (const [exerciseId, order] of [
+				[squat.id, 1],
+				[row.id, 2]
+			] as const) {
+				await workoutBuilder.execute(athlete.id, {
+					type: 'add_prescription_exercise',
+					prescriptionId: created.prescriptionId,
+					exerciseId,
+					order
+				});
+			}
+
+			await workoutBuilder.execute(athlete.id, {
+				type: 'create_custom_exercise',
+				prescriptionId: created.prescriptionId,
+				name: 'Custom order press',
+				order: 2
+			});
+
+			const prescription = await trainingSession.get(athlete.id, created.prescriptionId);
+			expect(
+				prescription?.workoutExercises.map(({ exercise, order }) => [exercise.name, order])
+			).toEqual([
+				['Custom order squat', 1],
+				['Custom order press', 2],
+				['Custom order row', 3]
+			]);
+		}
+	);
+
+	databaseTest(
+		'serializes concurrent Prescription Exercise and Set Target insertions',
+		async ({ harness }) => {
+			const athlete = await harness.athlete();
+			const [squat, press] = await Promise.all(
+				['Concurrent squat', 'Concurrent press'].map((name) => harness.catalogExercise(name))
+			);
+			const created = await workoutBuilder.execute(athlete.id, {
+				type: 'create_prescription',
+				name: 'Concurrent ordering',
+				date: '2026-07-14'
+			});
+			if (!created.ok || created.command !== 'create_prescription') {
+				throw new Error('Unexpected command outcome.');
+			}
+
+			const exerciseOutcomes = await Promise.all(
+				[squat, press].map(({ id: exerciseId }) =>
+					workoutBuilder.execute(athlete.id, {
+						type: 'add_prescription_exercise',
+						prescriptionId: created.prescriptionId,
+						exerciseId,
+						order: 1
+					})
+				)
+			);
+			expect(exerciseOutcomes).toEqual([
+				{
+					ok: true,
+					command: 'add_prescription_exercise',
+					prescriptionExerciseId: expect.any(Number)
+				},
+				{
+					ok: true,
+					command: 'add_prescription_exercise',
+					prescriptionExerciseId: expect.any(Number)
+				}
+			]);
+			const firstExercise = exerciseOutcomes[0];
+			if (!firstExercise.ok || firstExercise.command !== 'add_prescription_exercise') {
+				throw new Error('Unexpected command outcome.');
+			}
+
+			const targetOutcomes = await Promise.all(
+				[5, 10].map((reps) =>
+					workoutBuilder.execute(athlete.id, {
+						type: 'add_set_target',
+						prescriptionExerciseId: firstExercise.prescriptionExerciseId,
+						setNumber: 1,
+						reps
+					})
+				)
+			);
+			expect(targetOutcomes.every(({ ok }) => ok)).toBe(true);
+
+			const prescription = await trainingSession.get(athlete.id, created.prescriptionId);
+			expect(prescription?.workoutExercises.map(({ order }) => order)).toEqual([1, 2]);
+			expect(prescription?.workoutExercises.map(({ exercise }) => exercise.name).sort()).toEqual([
+				'Concurrent press',
+				'Concurrent squat'
+			]);
+			const concurrentTargets = prescription?.workoutExercises.find(
+				({ id }) => id === firstExercise.prescriptionExerciseId
+			)?.sets;
+			expect(concurrentTargets?.map(({ setNumber }) => setNumber)).toEqual([1, 2]);
+			expect(concurrentTargets?.map(({ reps }) => reps).sort((a, b) => a - b)).toEqual([5, 10]);
+		}
+	);
+
+	databaseTest(
+		'moves a Prescription Exercise and repositions its siblings',
+		async ({ harness }) => {
+			const athlete = await harness.athlete();
+			const exercises = await Promise.all(
+				['Move squat', 'Move press', 'Move row'].map((name) => harness.catalogExercise(name))
+			);
+			const created = await workoutBuilder.execute(athlete.id, {
+				type: 'create_prescription',
+				name: 'Move prescription',
+				date: '2026-07-14'
+			});
+			if (!created.ok || created.command !== 'create_prescription') {
+				throw new Error('Unexpected command outcome.');
+			}
+			const prescriptionExerciseIds: number[] = [];
+			for (const exercise of exercises) {
+				const outcome = await workoutBuilder.execute(athlete.id, {
+					type: 'add_prescription_exercise',
+					prescriptionId: created.prescriptionId,
+					exerciseId: exercise.id
+				});
+				if (!outcome.ok || outcome.command !== 'add_prescription_exercise') {
+					throw new Error('Unexpected command outcome.');
+				}
+				prescriptionExerciseIds.push(outcome.prescriptionExerciseId);
+			}
+
+			expect(
+				await workoutBuilder.execute(athlete.id, {
+					type: 'move_prescription_exercise',
+					prescriptionExerciseId: prescriptionExerciseIds[2],
+					order: 1
+				})
+			).toEqual({ ok: true, command: 'move_prescription_exercise' });
+
+			const prescription = await trainingSession.get(athlete.id, created.prescriptionId);
+			expect(
+				prescription?.workoutExercises.map(({ exercise, order }) => [exercise.name, order])
+			).toEqual([
+				['Move row', 1],
+				['Move squat', 2],
+				['Move press', 3]
+			]);
+		}
+	);
+
+	databaseTest(
+		'moves and deletes middle siblings without leaving ordering gaps',
+		async ({ harness }) => {
+			const athlete = await harness.athlete();
+			const exercises = await Promise.all(
+				['Gapless squat', 'Gapless press', 'Gapless row'].map((name) =>
+					harness.catalogExercise(name)
+				)
+			);
+			const created = await workoutBuilder.execute(athlete.id, {
+				type: 'create_prescription',
+				name: 'Gapless deletion',
+				date: '2026-07-14'
+			});
+			if (!created.ok || created.command !== 'create_prescription') {
+				throw new Error('Unexpected command outcome.');
+			}
+			const prescriptionExerciseIds: number[] = [];
+			for (const exercise of exercises) {
+				const outcome = await workoutBuilder.execute(athlete.id, {
+					type: 'add_prescription_exercise',
+					prescriptionId: created.prescriptionId,
+					exerciseId: exercise.id
+				});
+				if (!outcome.ok || outcome.command !== 'add_prescription_exercise') {
+					throw new Error('Unexpected command outcome.');
+				}
+				prescriptionExerciseIds.push(outcome.prescriptionExerciseId);
+			}
+
+			const targetIds: number[] = [];
+			for (const reps of [5, 10, 15]) {
+				const outcome = await workoutBuilder.execute(athlete.id, {
+					type: 'add_set_target',
+					prescriptionExerciseId: prescriptionExerciseIds[0],
+					setNumber: targetIds.length + 1,
+					reps
+				});
+				if (!outcome.ok || outcome.command !== 'add_set_target') {
+					throw new Error('Unexpected command outcome.');
+				}
+				targetIds.push(outcome.setTargetId);
+			}
+			expect(
+				await workoutBuilder.execute(athlete.id, {
+					type: 'update_set_target',
+					prescriptionExerciseId: prescriptionExerciseIds[0],
+					setTargetId: targetIds[2],
+					setNumber: 1,
+					reps: 15
+				})
+			).toEqual({ ok: true, command: 'update_set_target' });
+			expect(
+				await workoutBuilder.execute(athlete.id, {
+					type: 'delete_set_target',
+					setTargetId: targetIds[0]
+				})
+			).toEqual({ ok: true, command: 'delete_set_target' });
+			expect(
+				await workoutBuilder.execute(athlete.id, {
+					type: 'remove_prescription_exercise',
+					prescriptionExerciseId: prescriptionExerciseIds[1]
+				})
+			).toEqual({ ok: true, command: 'remove_prescription_exercise' });
+
+			const prescription = await trainingSession.get(athlete.id, created.prescriptionId);
+			expect(
+				prescription?.workoutExercises.map(({ exercise, order }) => [exercise.name, order])
+			).toEqual([
+				['Gapless squat', 1],
+				['Gapless row', 2]
+			]);
+			expect(
+				prescription?.workoutExercises[0].sets.map(({ reps, setNumber }) => [reps, setNumber])
+			).toEqual([
+				[15, 1],
+				[10, 2]
+			]);
+		}
+	);
+
 	databaseTest('owns Set Target creation, editing, and deletion', async ({ harness }) => {
 		const athlete = await harness.athlete();
 		const catalogExercise = await harness.catalogExercise('Builder row');
@@ -371,6 +700,85 @@ describe('Workout Builder', () => {
 				actualWeight: null,
 				status: 'planned'
 			});
+		}
+	);
+
+	databaseTest(
+		'repeats multiple Prescription Exercises and Set Targets in stable order',
+		async ({ harness }) => {
+			const athlete = await harness.athlete();
+			const exercises = await Promise.all(
+				['Repeat squat', 'Repeat press', 'Repeat row'].map((name) => harness.catalogExercise(name))
+			);
+			const source = await workoutBuilder.execute(athlete.id, {
+				type: 'create_prescription',
+				name: 'Ordered repeat source',
+				date: '2026-07-14'
+			});
+			if (!source.ok || source.command !== 'create_prescription') {
+				throw new Error('Unexpected command outcome.');
+			}
+			for (const [exerciseIndex, catalogExercise] of exercises.entries()) {
+				const added = await workoutBuilder.execute(athlete.id, {
+					type: 'add_prescription_exercise',
+					prescriptionId: source.prescriptionId,
+					exerciseId: catalogExercise.id
+				});
+				if (!added.ok || added.command !== 'add_prescription_exercise') {
+					throw new Error('Unexpected command outcome.');
+				}
+				for (const [setIndex, reps] of [5, 10].entries()) {
+					await workoutBuilder.execute(athlete.id, {
+						type: 'add_set_target',
+						prescriptionExerciseId: added.prescriptionExerciseId,
+						setNumber: setIndex + 1,
+						reps: reps + exerciseIndex
+					});
+				}
+			}
+
+			const repeated = await workoutBuilder.execute(athlete.id, {
+				type: 'repeat_prescription',
+				prescriptionId: source.prescriptionId,
+				repeatToken: randomUUID(),
+				date: '2026-07-15'
+			});
+			if (!repeated.ok || repeated.command !== 'repeat_prescription') {
+				throw new Error('Unexpected command outcome.');
+			}
+			const prescription = await trainingSession.get(athlete.id, repeated.prescriptionId);
+			expect(
+				prescription?.workoutExercises.map(({ exercise, order, sets }) => ({
+					name: exercise.name,
+					order,
+					sets: sets.map(({ setNumber, reps }) => [setNumber, reps])
+				}))
+			).toEqual([
+				{
+					name: 'Repeat squat',
+					order: 1,
+					sets: [
+						[1, 5],
+						[2, 10]
+					]
+				},
+				{
+					name: 'Repeat press',
+					order: 2,
+					sets: [
+						[1, 6],
+						[2, 11]
+					]
+				},
+				{
+					name: 'Repeat row',
+					order: 3,
+					sets: [
+						[1, 7],
+						[2, 12]
+					]
+				}
+			]);
 		}
 	);
 

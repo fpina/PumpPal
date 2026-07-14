@@ -1,6 +1,6 @@
 import { db } from '$lib/server/db';
 import { exercise, set, workout, workoutExercise } from '$lib/server/db/schema';
-import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, gte, isNull, lt, lte, or, sql } from 'drizzle-orm';
 
 interface SetTargetValues {
 	setNumber: number;
@@ -49,6 +49,11 @@ export type WorkoutBuilderCommand =
 			description?: string | null;
 			order?: number | null;
 	  }
+	| {
+			type: 'move_prescription_exercise';
+			prescriptionExerciseId: number;
+			order: number;
+	  }
 	| ({
 			type: 'add_set_target';
 			prescriptionExerciseId: number;
@@ -79,6 +84,7 @@ export type WorkoutBuilderOutcome =
 			exerciseId: number;
 			prescriptionExerciseId: number;
 	  }
+	| { ok: true; command: 'move_prescription_exercise' }
 	| { ok: true; command: 'add_set_target'; setTargetId: number }
 	| { ok: true; command: 'update_set_target' }
 	| { ok: true; command: 'delete_set_target' }
@@ -97,9 +103,35 @@ function exerciseVisibleToAthlete(athleteId: string) {
 	return or(isNull(exercise.ownerId), eq(exercise.ownerId, athleteId));
 }
 
+function insertionPosition(requestedPosition: number | null | undefined, siblingCount: number) {
+	return Math.max(1, Math.min(requestedPosition ?? siblingCount + 1, siblingCount + 1));
+}
+
+async function makeRoomForPrescriptionExercise(
+	tx: Transaction,
+	prescriptionId: number,
+	requestedOrder: number | null | undefined
+) {
+	const [{ siblingCount }] = await tx
+		.select({ siblingCount: count() })
+		.from(workoutExercise)
+		.where(eq(workoutExercise.workoutId, prescriptionId));
+	const order = insertionPosition(requestedOrder, siblingCount);
+	await tx
+		.update(workoutExercise)
+		.set({ order: sql`${workoutExercise.order} + 1` })
+		.where(and(eq(workoutExercise.workoutId, prescriptionId), gte(workoutExercise.order, order)));
+	return order;
+}
+
 async function lockOwnedPrescription(tx: Transaction, athleteId: string, prescriptionId: number) {
 	const [prescription] = await tx
-		.select({ id: workout.id, finishedAt: workout.finishedAt })
+		.select({
+			id: workout.id,
+			name: workout.name,
+			notes: workout.notes,
+			finishedAt: workout.finishedAt
+		})
 		.from(workout)
 		.where(and(eq(workout.id, prescriptionId), eq(workout.userId, athleteId)))
 		.limit(1)
@@ -140,6 +172,7 @@ async function ownedSetTarget(tx: Transaction, athleteId: string, setTargetId: n
 			id: set.id,
 			workoutExerciseId: set.workoutExerciseId,
 			prescriptionId: workoutExercise.workoutId,
+			setNumber: set.setNumber,
 			status: set.status
 		})
 		.from(set)
@@ -244,28 +277,16 @@ export const workoutBuilder = {
 				return db.transaction(async (tx) => {
 					const lockedSource = await lockOwnedPrescription(tx, athleteId, command.prescriptionId);
 					if (!lockedSource) return { ok: false, code: 'not_found' };
-					const source = await tx.query.workout.findFirst({
-						where: and(eq(workout.id, command.prescriptionId), eq(workout.userId, athleteId)),
-						with: {
-							workoutExercises: {
-								with: {
-									sets: { orderBy: (targets, { asc }) => [asc(targets.setNumber)] }
-								},
-								orderBy: (entries, { asc }) => [asc(entries.order)]
-							}
-						}
-					});
-					if (!source) throw new Error('Locked Workout Prescription disappeared.');
 
 					const [created] = await tx
 						.insert(workout)
 						.values({
 							userId: athleteId,
-							name: source.name,
+							name: lockedSource.name,
 							date: command.date,
-							notes: source.notes,
+							notes: lockedSource.notes,
 							repeatToken: command.repeatToken,
-							repeatedFromWorkoutId: source.id
+							repeatedFromWorkoutId: lockedSource.id
 						})
 						.onConflictDoNothing({ target: workout.repeatToken })
 						.returning({ id: workout.id });
@@ -293,32 +314,36 @@ export const workoutBuilder = {
 							: { ok: false, code: 'conflict', reason: 'repeat_token' };
 					}
 
-					for (const sourceExercise of source.workoutExercises) {
-						const [createdExercise] = await tx
-							.insert(workoutExercise)
-							.values({
-								workoutId: created.id,
-								exerciseId: sourceExercise.exerciseId,
-								order: sourceExercise.order,
-								notes: sourceExercise.notes
-							})
-							.returning({ id: workoutExercise.id });
-						if (!createdExercise) {
-							throw new Error('Failed to copy Exercise into repeated Workout Prescription.');
-						}
-						if (sourceExercise.sets.length > 0) {
-							await tx.insert(set).values(
-								sourceExercise.sets.map((sourceTarget) => ({
-									workoutExerciseId: createdExercise.id,
-									setNumber: sourceTarget.setNumber,
-									reps: sourceTarget.reps,
-									weight: sourceTarget.weight,
-									weightUnit: sourceTarget.weightUnit,
-									restTimeSeconds: sourceTarget.restTimeSeconds
-								}))
-							);
-						}
-					}
+					await tx.execute(sql`
+						INSERT INTO "workout_exercise" ("workout_id", "exercise_id", "order", "notes")
+						SELECT ${created.id}, source_exercise."exercise_id", source_exercise."order", source_exercise."notes"
+						FROM "workout_exercise" AS source_exercise
+						WHERE source_exercise."workout_id" = ${lockedSource.id}
+					`);
+					await tx.execute(sql`
+						INSERT INTO "set" (
+							"workout_exercise_id",
+							"set_number",
+							"reps",
+							"weight",
+							"weight_unit",
+							"rest_time_seconds"
+						)
+						SELECT
+							repeated_exercise."id",
+							source_target."set_number",
+							source_target."reps",
+							source_target."weight",
+							source_target."weight_unit",
+							source_target."rest_time_seconds"
+						FROM "workout_exercise" AS source_exercise
+						INNER JOIN "set" AS source_target
+							ON source_target."workout_exercise_id" = source_exercise."id"
+						INNER JOIN "workout_exercise" AS repeated_exercise
+							ON repeated_exercise."workout_id" = ${created.id}
+							AND repeated_exercise."order" = source_exercise."order"
+						WHERE source_exercise."workout_id" = ${lockedSource.id}
+					`);
 
 					return {
 						ok: true,
@@ -339,12 +364,14 @@ export const workoutBuilder = {
 						.limit(1);
 					if (!visibleExercise) return { ok: false, code: 'not_found' };
 
+					const order = await makeRoomForPrescriptionExercise(tx, prescription.id, command.order);
+
 					const [created] = await tx
 						.insert(workoutExercise)
 						.values({
 							workoutId: prescription.id,
 							exerciseId: visibleExercise.id,
-							order: command.order,
+							order,
 							notes: command.notes
 						})
 						.returning({ id: workoutExercise.id });
@@ -377,12 +404,14 @@ export const workoutBuilder = {
 						return { ok: false, code: 'conflict', reason: 'custom_exercise_name' };
 					}
 
+					const order = await makeRoomForPrescriptionExercise(tx, prescription.id, command.order);
+
 					const [createdEntry] = await tx
 						.insert(workoutExercise)
 						.values({
 							workoutId: prescription.id,
 							exerciseId: createdExercise.id,
-							order: command.order
+							order
 						})
 						.returning({ id: workoutExercise.id });
 					if (!createdEntry) {
@@ -394,6 +423,63 @@ export const workoutBuilder = {
 						exerciseId: createdExercise.id,
 						prescriptionExerciseId: createdEntry.id
 					};
+				});
+			case 'move_prescription_exercise':
+				return db.transaction(async (tx) => {
+					const prescriptionId = await ownedPrescriptionIdForExercise(
+						tx,
+						athleteId,
+						command.prescriptionExerciseId
+					);
+					if (!prescriptionId) return { ok: false, code: 'not_found' };
+					const editable = await lockEditablePrescription(tx, athleteId, prescriptionId);
+					if (!editable.ok) return editable;
+
+					const [entry] = await tx
+						.select({ order: workoutExercise.order, prescriptionId: workoutExercise.workoutId })
+						.from(workoutExercise)
+						.where(eq(workoutExercise.id, command.prescriptionExerciseId))
+						.limit(1);
+					if (!entry || entry.prescriptionId !== editable.prescription.id) {
+						return { ok: false, code: 'not_found' };
+					}
+
+					const [{ siblingCount }] = await tx
+						.select({ siblingCount: count() })
+						.from(workoutExercise)
+						.where(eq(workoutExercise.workoutId, entry.prescriptionId));
+					const order = Math.max(1, Math.min(command.order, siblingCount));
+					if (order < entry.order) {
+						await tx
+							.update(workoutExercise)
+							.set({ order: sql`${workoutExercise.order} + 1` })
+							.where(
+								and(
+									eq(workoutExercise.workoutId, entry.prescriptionId),
+									gte(workoutExercise.order, order),
+									lt(workoutExercise.order, entry.order)
+								)
+							);
+					} else if (order > entry.order) {
+						await tx
+							.update(workoutExercise)
+							.set({ order: sql`${workoutExercise.order} - 1` })
+							.where(
+								and(
+									eq(workoutExercise.workoutId, entry.prescriptionId),
+									gt(workoutExercise.order, entry.order),
+									lte(workoutExercise.order, order)
+								)
+							);
+					}
+
+					if (order !== entry.order) {
+						await tx
+							.update(workoutExercise)
+							.set({ order })
+							.where(eq(workoutExercise.id, command.prescriptionExerciseId));
+					}
+					return { ok: true, command: 'move_prescription_exercise' };
 				});
 			case 'add_set_target':
 				return db.transaction(async (tx) => {
@@ -413,11 +499,26 @@ export const workoutBuilder = {
 					);
 					if (currentPrescriptionId !== prescription.id) return { ok: false, code: 'not_found' };
 
+					const [{ siblingCount }] = await tx
+						.select({ siblingCount: count() })
+						.from(set)
+						.where(eq(set.workoutExerciseId, command.prescriptionExerciseId));
+					const setNumber = insertionPosition(command.setNumber, siblingCount);
+					await tx
+						.update(set)
+						.set({ setNumber: sql`${set.setNumber} + 1` })
+						.where(
+							and(
+								eq(set.workoutExerciseId, command.prescriptionExerciseId),
+								gte(set.setNumber, setNumber)
+							)
+						);
+
 					const [created] = await tx
 						.insert(set)
 						.values({
 							workoutExerciseId: command.prescriptionExerciseId,
-							setNumber: command.setNumber,
+							setNumber,
 							reps: command.reps,
 							weight: command.weight,
 							weightUnit: command.weightUnit || 'kg',
@@ -446,19 +547,39 @@ export const workoutBuilder = {
 						return { ok: false, code: 'invalid_transition' };
 					}
 
-					const existingTargets = await tx
-						.select({ id: set.id })
+					const [{ siblingCount }] = await tx
+						.select({ siblingCount: count() })
 						.from(set)
-						.where(eq(set.workoutExerciseId, command.prescriptionExerciseId))
-						.orderBy(asc(set.setNumber), asc(set.id));
-					const reorderedTargets = existingTargets.filter(({ id }) => id !== command.setTargetId);
-					reorderedTargets.splice(Math.min(command.setNumber - 1, reorderedTargets.length), 0, {
-						id: command.setTargetId
-					});
+						.where(eq(set.workoutExerciseId, command.prescriptionExerciseId));
+					const setNumber = Math.max(1, Math.min(command.setNumber, siblingCount));
+					if (setNumber < currentTarget.setNumber) {
+						await tx
+							.update(set)
+							.set({ setNumber: sql`${set.setNumber} + 1` })
+							.where(
+								and(
+									eq(set.workoutExerciseId, command.prescriptionExerciseId),
+									gte(set.setNumber, setNumber),
+									lt(set.setNumber, currentTarget.setNumber)
+								)
+							);
+					} else if (setNumber > currentTarget.setNumber) {
+						await tx
+							.update(set)
+							.set({ setNumber: sql`${set.setNumber} - 1` })
+							.where(
+								and(
+									eq(set.workoutExerciseId, command.prescriptionExerciseId),
+									gt(set.setNumber, currentTarget.setNumber),
+									lte(set.setNumber, setNumber)
+								)
+							);
+					}
 
 					const [updated] = await tx
 						.update(set)
 						.set({
+							setNumber,
 							reps: command.reps,
 							weight: command.weight,
 							weightUnit: command.weightUnit || 'kg',
@@ -467,12 +588,6 @@ export const workoutBuilder = {
 						.where(eq(set.id, command.setTargetId))
 						.returning({ id: set.id });
 					if (!updated) throw new Error('Failed to update Set Target.');
-					for (const [index, entry] of reorderedTargets.entries()) {
-						await tx
-							.update(set)
-							.set({ setNumber: index + 1 })
-							.where(eq(set.id, entry.id));
-					}
 					return { ok: true, command: 'update_set_target' };
 				});
 			case 'delete_set_target':
@@ -488,17 +603,15 @@ export const workoutBuilder = {
 					}
 
 					await tx.delete(set).where(eq(set.id, currentTarget.id));
-					const remainingTargets = await tx
-						.select({ id: set.id })
-						.from(set)
-						.where(eq(set.workoutExerciseId, currentTarget.workoutExerciseId))
-						.orderBy(asc(set.setNumber), asc(set.id));
-					for (const [index, entry] of remainingTargets.entries()) {
-						await tx
-							.update(set)
-							.set({ setNumber: index + 1 })
-							.where(eq(set.id, entry.id));
-					}
+					await tx
+						.update(set)
+						.set({ setNumber: sql`${set.setNumber} - 1` })
+						.where(
+							and(
+								eq(set.workoutExerciseId, currentTarget.workoutExerciseId),
+								gt(set.setNumber, currentTarget.setNumber)
+							)
+						);
 					return { ok: true, command: 'delete_set_target' };
 				});
 			case 'remove_prescription_exercise':
@@ -524,20 +637,25 @@ export const workoutBuilder = {
 						return { ok: false, code: 'invalid_transition' };
 					}
 
+					const [entry] = await tx
+						.select({ order: workoutExercise.order })
+						.from(workoutExercise)
+						.where(eq(workoutExercise.id, command.prescriptionExerciseId))
+						.limit(1);
+					if (!entry) return { ok: false, code: 'not_found' };
+
 					await tx
 						.delete(workoutExercise)
 						.where(eq(workoutExercise.id, command.prescriptionExerciseId));
-					const remainingEntries = await tx
-						.select({ id: workoutExercise.id })
-						.from(workoutExercise)
-						.where(eq(workoutExercise.workoutId, prescription.id))
-						.orderBy(asc(workoutExercise.order), asc(workoutExercise.id));
-					for (const [index, entry] of remainingEntries.entries()) {
-						await tx
-							.update(workoutExercise)
-							.set({ order: index + 1 })
-							.where(eq(workoutExercise.id, entry.id));
-					}
+					await tx
+						.update(workoutExercise)
+						.set({ order: sql`${workoutExercise.order} - 1` })
+						.where(
+							and(
+								eq(workoutExercise.workoutId, prescription.id),
+								gt(workoutExercise.order, entry.order)
+							)
+						);
 					return { ok: true, command: 'remove_prescription_exercise' };
 				});
 		}

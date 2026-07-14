@@ -1,0 +1,2 @@
+CREATE INDEX "set_workout_exercise_status_idx" ON "set" USING btree ("workout_exercise_id","status");--> statement-breakpoint
+CREATE INDEX "workout_user_date_id_idx" ON "workout" USING btree ("user_id","date" DESC NULLS LAST,"id" DESC NULLS LAST);

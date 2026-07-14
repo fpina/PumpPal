@@ -85,6 +85,27 @@
       "when": 1784018365017,
       "tag": "0011_track-repeat-source",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1784040278372,
+      "tag": "0012_stable-exercise-order",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1784040403838,
+      "tag": "0013_stable-set-target-order",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1784040867444,
+      "tag": "0014_ordering-query-indexes",
+      "breakpoints": true
     }
   ]
 }

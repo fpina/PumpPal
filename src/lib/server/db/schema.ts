@@ -9,6 +9,8 @@ import {
 	boolean,
 	varchar,
 	uniqueIndex,
+	index,
+	unique,
 	check,
 	type AnyPgColumn
 } from 'drizzle-orm/pg-core';
@@ -140,6 +142,7 @@ export const workout = pgTable(
 	},
 	(table) => [
 		uniqueIndex('workout_repeat_token_unique').on(table.repeatToken),
+		index('workout_user_date_id_idx').on(table.userId, table.date.desc(), table.id.desc()),
 		check(
 			'workout_session_status_check',
 			sql`${table.sessionStatus} in ('planned', 'active', 'finished')`
@@ -164,17 +167,24 @@ export type Workout = typeof workout.$inferSelect;
 
 // --- Workout Exercises ---
 // Junction table: Links specific exercises performed within a workout session
-export const workoutExercise = pgTable('workout_exercise', {
-	id: serial('id').primaryKey(),
-	workoutId: integer('workout_id')
-		.notNull()
-		.references(() => workout.id, { onDelete: 'cascade' }),
-	exerciseId: integer('exercise_id')
-		.notNull()
-		.references(() => exercise.id, { onDelete: 'restrict' }), // Prevent deleting an exercise if it's used in logs
-	order: integer('order'), // Optional: sequence of the exercise in the workout
-	notes: text('notes') // Specific notes for this exercise in this workout
-});
+export const workoutExercise = pgTable(
+	'workout_exercise',
+	{
+		id: serial('id').primaryKey(),
+		workoutId: integer('workout_id')
+			.notNull()
+			.references(() => workout.id, { onDelete: 'cascade' }),
+		exerciseId: integer('exercise_id')
+			.notNull()
+			.references(() => exercise.id, { onDelete: 'restrict' }), // Prevent deleting an exercise if it's used in logs
+		order: integer('order').notNull(),
+		notes: text('notes') // Specific notes for this exercise in this workout
+	},
+	(table) => [
+		unique('workout_exercise_order_unique').on(table.workoutId, table.order),
+		check('workout_exercise_order_positive_check', sql`${table.order} > 0`)
+	]
+);
 
 export const workoutExercisesRelations = relations(workoutExercise, ({ one, many }) => ({
 	workout: one(workout, {
@@ -215,6 +225,9 @@ export const set = pgTable(
 		createdAt: timestamp('created_at').defaultNow().notNull()
 	},
 	(table) => [
+		unique('set_target_number_unique').on(table.workoutExerciseId, table.setNumber),
+		index('set_workout_exercise_status_idx').on(table.workoutExerciseId, table.status),
+		check('set_target_number_positive_check', sql`${table.setNumber} > 0`),
 		check(
 			'set_status_check',
 			sql`${table.status} in ('planned', 'active', 'completed', 'skipped')`
