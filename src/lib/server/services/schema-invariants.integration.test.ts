@@ -2,26 +2,52 @@ import { db } from '$lib/server/db';
 import { set, trainingSegment } from '$lib/server/db/schema';
 import { databaseTest } from '../../../../tests/harness/integration';
 import { expect } from 'vitest';
-import { workoutService } from './workout.service';
 import { trainingSession } from './training-session';
+import { workoutBuilder } from './workout-builder';
+
+async function createPrescription(athleteId: string, name: string) {
+	const outcome = await workoutBuilder.execute(athleteId, {
+		type: 'create_prescription',
+		name,
+		date: '2026-07-13'
+	});
+	if (!outcome.ok || outcome.command !== 'create_prescription') {
+		throw new Error('Failed to create Workout Prescription for test setup.');
+	}
+	return outcome.prescriptionId;
+}
+
+async function addPrescriptionExercise(
+	athleteId: string,
+	prescriptionId: number,
+	exerciseId: number
+) {
+	const outcome = await workoutBuilder.execute(athleteId, {
+		type: 'add_prescription_exercise',
+		prescriptionId,
+		exerciseId
+	});
+	if (!outcome.ok || outcome.command !== 'add_prescription_exercise') {
+		throw new Error('Failed to add Prescription Exercise for test setup.');
+	}
+	return outcome.prescriptionExerciseId;
+}
 
 databaseTest(
 	'a default Set Target satisfies the planned persistence invariants',
 	async ({ harness }) => {
 		const athlete = await harness.athlete();
 		const catalogExercise = await harness.catalogExercise();
-		const workout = await workoutService.createWorkout(athlete.id, {
-			name: 'Persistence invariant workout',
-			date: '2026-07-13'
-		});
-		const workoutEntry = await workoutService.addExerciseToWorkout(athlete.id, {
-			workoutId: workout.id,
-			exerciseId: catalogExercise.id
-		});
+		const prescriptionId = await createPrescription(athlete.id, 'Persistence invariant workout');
+		const prescriptionExerciseId = await addPrescriptionExercise(
+			athlete.id,
+			prescriptionId,
+			catalogExercise.id
+		);
 
 		const [createdSet] = await db
 			.insert(set)
-			.values({ workoutExerciseId: workoutEntry.id, setNumber: 1, reps: 8 })
+			.values({ workoutExerciseId: prescriptionExerciseId, setNumber: 1, reps: 8 })
 			.returning();
 
 		expect(createdSet).toMatchObject({
@@ -37,20 +63,18 @@ databaseTest(
 databaseTest('Set Targets reject invalid persisted values', async ({ harness }) => {
 	const athlete = await harness.athlete();
 	const catalogExercise = await harness.catalogExercise();
-	const workout = await workoutService.createWorkout(athlete.id, {
-		name: 'Constraint workout',
-		date: '2026-07-13'
-	});
-	const workoutEntry = await workoutService.addExerciseToWorkout(athlete.id, {
-		workoutId: workout.id,
-		exerciseId: catalogExercise.id
-	});
+	const prescriptionId = await createPrescription(athlete.id, 'Constraint workout');
+	const prescriptionExerciseId = await addPrescriptionExercise(
+		athlete.id,
+		prescriptionId,
+		catalogExercise.id
+	);
 
 	await expect(
 		db
 			.insert(set)
 			.values({
-				workoutExerciseId: workoutEntry.id,
+				workoutExerciseId: prescriptionExerciseId,
 				setNumber: 1,
 				reps: -1,
 				completed: false
@@ -65,14 +89,11 @@ databaseTest(
 	'a Training Session cannot persist two open Training Segments',
 	async ({ harness }) => {
 		const athlete = await harness.athlete();
-		const workout = await workoutService.createWorkout(athlete.id, {
-			name: 'Segment invariant workout',
-			date: '2026-07-13'
-		});
-		await trainingSession.start(athlete.id, workout.id);
+		const prescriptionId = await createPrescription(athlete.id, 'Segment invariant workout');
+		await trainingSession.start(athlete.id, prescriptionId);
 
 		await expect(
-			db.insert(trainingSegment).values({ workoutId: workout.id, startedAt: new Date() })
+			db.insert(trainingSegment).values({ workoutId: prescriptionId, startedAt: new Date() })
 		).rejects.toMatchObject({
 			cause: { code: '23505', constraint_name: 'training_segment_one_open_per_workout_unique' }
 		});

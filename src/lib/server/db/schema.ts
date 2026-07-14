@@ -9,7 +9,8 @@ import {
 	boolean,
 	varchar,
 	uniqueIndex,
-	check
+	check,
+	type AnyPgColumn
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
@@ -122,6 +123,10 @@ export const workout = pgTable(
 		date: date('date', { mode: 'string' }).notNull(),
 		notes: text('notes'), // General notes for the workout session
 		repeatToken: text('repeat_token'),
+		repeatedFromWorkoutId: integer('repeated_from_workout_id').references(
+			(): AnyPgColumn => workout.id,
+			{ onDelete: 'set null' }
+		),
 		sessionStatus: varchar('session_status', { length: 20 })
 			.$type<WorkoutSessionStatus>()
 			.default('planned')

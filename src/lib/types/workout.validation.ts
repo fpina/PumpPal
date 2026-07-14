@@ -18,7 +18,7 @@ export const createWorkoutSchema = z.object({
 });
 
 export const updateWorkoutSchema = createWorkoutSchema.extend({
-	workoutId: z.coerce.number().int().positive('Workout is required.')
+	workoutId: z.coerce.number().int().positive('Workout Prescription is required.')
 });
 
 const optionalInteger = (minimum = 0) =>
@@ -46,13 +46,12 @@ export const createExerciseSchema = z.object({
 });
 
 export const addSetSchema = z.object({
-	workoutExerciseId: z.coerce.number().int().positive('Exercise entry is required.'),
+	workoutExerciseId: z.coerce.number().int().positive('Prescription Exercise is required.'),
 	setNumber: z.coerce.number().int().positive('Set number must be positive.'),
 	reps: z.coerce.number().int().min(0, 'Reps cannot be negative.').max(10_000),
 	weight: optionalNumber(),
 	weightUnit: z.enum(['kg', 'lb']),
-	restTimeSeconds: optionalInteger(),
-	completed: z.preprocess((value) => value === 'on' || value === true, z.boolean())
+	restTimeSeconds: optionalInteger()
 });
 
 export const updateSetSchema = addSetSchema.extend({
@@ -60,7 +59,7 @@ export const updateSetSchema = addSetSchema.extend({
 });
 
 export const workoutExerciseMutationSchema = z.object({
-	workoutExerciseId: z.coerce.number().int().positive('Exercise entry is required.')
+	workoutExerciseId: z.coerce.number().int().positive('Prescription Exercise is required.')
 });
 
 export const setMutationSchema = z.object({
@@ -68,7 +67,7 @@ export const setMutationSchema = z.object({
 });
 
 export const workoutMutationSchema = z.object({
-	workoutId: z.coerce.number().int().positive('Workout is required.')
+	workoutId: z.coerce.number().int().positive('Workout Prescription is required.')
 });
 
 export const repeatWorkoutSchema = workoutMutationSchema.extend({

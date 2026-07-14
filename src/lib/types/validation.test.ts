@@ -50,8 +50,7 @@ describe('workout validation', () => {
 			reps: '8',
 			weight: '72.5',
 			weightUnit: 'kg',
-			restTimeSeconds: '',
-			completed: 'on'
+			restTimeSeconds: ''
 		});
 
 		assert.isTrue(workout.success);
@@ -59,7 +58,6 @@ describe('workout validation', () => {
 		if (workoutSet.success) {
 			assert.strictEqual(workoutSet.data.weight, 72.5);
 			assert.isUndefined(workoutSet.data.restTimeSeconds);
-			assert.isTrue(workoutSet.data.completed);
 		}
 	});
 
@@ -77,8 +75,7 @@ describe('workout validation', () => {
 			reps: '10',
 			weight: '',
 			weightUnit: 'lb',
-			restTimeSeconds: '90',
-			completed: ''
+			restTimeSeconds: '90'
 		});
 
 		assert.isTrue(workout.success);
@@ -106,8 +103,7 @@ describe('workout validation', () => {
 				reps: '-1',
 				weight: '-20',
 				weightUnit: 'stone',
-				restTimeSeconds: '-5',
-				completed: 'on'
+				restTimeSeconds: '-5'
 			}).success
 		);
 	});

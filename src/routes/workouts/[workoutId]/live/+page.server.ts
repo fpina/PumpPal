@@ -1,18 +1,14 @@
 import { logOperationalFailure } from '$lib/server/operational-log';
 import { trainingSession } from '$lib/server/services/training-session';
 import type { TrainingSessionOutcome } from '$lib/server/services/training-session';
+import { positiveRouteId, requireAthleteId } from '$lib/server/workout-route';
 import {
 	liveSetSchema,
 	setMutationSchema,
 	workoutMutationSchema
 } from '$lib/types/workout.validation';
-import { error, fail, redirect } from '@sveltejs/kit';
+import { error, fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-
-function routeId(value: string) {
-	const id = Number(value);
-	return Number.isInteger(id) && id > 0 ? id : null;
-}
 
 function transitionFailure(code: 'not_found' | 'invalid_transition', message: string) {
 	return fail(code === 'not_found' ? 404 : 409, { success: false, message });
@@ -34,12 +30,12 @@ async function applyTransition<T extends string>(
 }
 
 export const load: PageServerLoad = async ({ params, locals }) => {
-	if (!locals.user) throw redirect(302, '/auth');
-	const workoutId = routeId(params.workoutId);
+	const athleteId = requireAthleteId(locals);
+	const workoutId = positiveRouteId(params.workoutId);
 	if (!workoutId) throw error(404, 'Workout not found.');
 	let workout;
 	try {
-		workout = await trainingSession.get(locals.user.id, workoutId);
+		workout = await trainingSession.get(athleteId, workoutId);
 	} catch (cause) {
 		logOperationalFailure('training_session.load', cause);
 		throw error(500, 'Could not load this Training Session.');
@@ -50,9 +46,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
 export const actions: Actions = {
 	start: async ({ request, params, locals }) => {
-		if (!locals.user) throw redirect(302, '/auth');
-		const athleteId = locals.user.id;
-		const workoutId = routeId(params.workoutId);
+		const athleteId = requireAthleteId(locals);
+		const workoutId = positiveRouteId(params.workoutId);
 		const formData = await request.formData();
 		const parsed = workoutMutationSchema.safeParse({ workoutId: formData.get('workoutId') });
 		if (!parsed.success || parsed.data.workoutId !== workoutId) {
@@ -66,9 +61,8 @@ export const actions: Actions = {
 		);
 	},
 	reopen: async ({ request, params, locals }) => {
-		if (!locals.user) throw redirect(302, '/auth');
-		const athleteId = locals.user.id;
-		const workoutId = routeId(params.workoutId);
+		const athleteId = requireAthleteId(locals);
+		const workoutId = positiveRouteId(params.workoutId);
 		const formData = await request.formData();
 		const parsed = workoutMutationSchema.safeParse({ workoutId: formData.get('workoutId') });
 		if (!parsed.success || parsed.data.workoutId !== workoutId) {
@@ -82,9 +76,8 @@ export const actions: Actions = {
 		);
 	},
 	finish: async ({ request, params, locals }) => {
-		if (!locals.user) throw redirect(302, '/auth');
-		const athleteId = locals.user.id;
-		const workoutId = routeId(params.workoutId);
+		const athleteId = requireAthleteId(locals);
+		const workoutId = positiveRouteId(params.workoutId);
 		const formData = await request.formData();
 		const parsed = workoutMutationSchema.safeParse({ workoutId: formData.get('workoutId') });
 		if (!parsed.success || parsed.data.workoutId !== workoutId) {
@@ -98,9 +91,8 @@ export const actions: Actions = {
 		);
 	},
 	activateSetTarget: async ({ request, params, locals }) => {
-		if (!locals.user) throw redirect(302, '/auth');
-		const athleteId = locals.user.id;
-		const workoutId = routeId(params.workoutId);
+		const athleteId = requireAthleteId(locals);
+		const workoutId = positiveRouteId(params.workoutId);
 		const formData = await request.formData();
 		const parsed = setMutationSchema.safeParse({ setId: formData.get('setId') });
 		if (!parsed.success || !workoutId) {
@@ -114,9 +106,8 @@ export const actions: Actions = {
 		);
 	},
 	recordSetResult: async ({ request, params, locals }) => {
-		if (!locals.user) throw redirect(302, '/auth');
-		const athleteId = locals.user.id;
-		const workoutId = routeId(params.workoutId);
+		const athleteId = requireAthleteId(locals);
+		const workoutId = positiveRouteId(params.workoutId);
 		const formData = await request.formData();
 		const parsed = liveSetSchema.safeParse({
 			setId: formData.get('setId'),
@@ -145,9 +136,8 @@ export const actions: Actions = {
 		);
 	},
 	skipSetTarget: async ({ request, params, locals }) => {
-		if (!locals.user) throw redirect(302, '/auth');
-		const athleteId = locals.user.id;
-		const workoutId = routeId(params.workoutId);
+		const athleteId = requireAthleteId(locals);
+		const workoutId = positiveRouteId(params.workoutId);
 		const formData = await request.formData();
 		const parsed = setMutationSchema.safeParse({ setId: formData.get('setId') });
 		if (!parsed.success || !workoutId) {
@@ -161,9 +151,8 @@ export const actions: Actions = {
 		);
 	},
 	dismissRest: async ({ params, locals }) => {
-		if (!locals.user) throw redirect(302, '/auth');
-		const athleteId = locals.user.id;
-		const workoutId = routeId(params.workoutId);
+		const athleteId = requireAthleteId(locals);
+		const workoutId = positiveRouteId(params.workoutId);
 		if (!workoutId) return fail(400, { success: false, message: 'Invalid workout.' });
 		return applyTransition(
 			'training_session.dismiss_rest',

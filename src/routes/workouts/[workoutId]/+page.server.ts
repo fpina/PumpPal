@@ -1,10 +1,11 @@
 import {
-	ExerciseNameConflictError,
-	WorkoutDomainError,
-	workoutService
-} from '$lib/server/services/workout.service';
+	workoutBuilder,
+	type WorkoutBuilderCommand,
+	type WorkoutBuilderOutcome
+} from '$lib/server/services/workout-builder';
 import { trainingSession } from '$lib/server/services/training-session';
 import { logOperationalFailure } from '$lib/server/operational-log';
+import { positiveRouteId, requireAthleteId } from '$lib/server/workout-route';
 import {
 	addExerciseSchema,
 	addSetSchema,
@@ -20,17 +21,65 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
 import type { Actions, PageServerLoad } from './$types';
 
-function parseWorkoutId(value: string) {
-	const workoutId = Number(value);
-	return Number.isInteger(workoutId) && workoutId > 0 ? workoutId : null;
+type BuilderRejection = Extract<WorkoutBuilderOutcome, { ok: false }>;
+
+interface BuilderFailureMessages {
+	notFound: string;
+	invalidTransition: string;
+	conflict?: string;
+	operational: string;
+}
+
+function builderRejectionStatus(outcome: BuilderRejection) {
+	return outcome.code === 'not_found' ? 404 : 409;
+}
+
+function builderRejectionMessage(outcome: BuilderRejection, messages: BuilderFailureMessages) {
+	switch (outcome.code) {
+		case 'not_found':
+			return messages.notFound;
+		case 'invalid_transition':
+			return messages.invalidTransition;
+		case 'conflict':
+			return messages.conflict ?? messages.invalidTransition;
+	}
+}
+
+async function applyBuilderCommand<T extends Record<string, unknown>>(
+	operation: string,
+	athleteId: string,
+	command: WorkoutBuilderCommand,
+	failureData: T,
+	messages: BuilderFailureMessages
+) {
+	try {
+		const outcome = await workoutBuilder.execute(athleteId, command);
+		if (outcome.ok) return { ok: true, outcome } as const;
+		return {
+			ok: false,
+			response: fail(builderRejectionStatus(outcome), {
+				...failureData,
+				success: false,
+				message: builderRejectionMessage(outcome, messages)
+			})
+		} as const;
+	} catch (cause) {
+		logOperationalFailure(operation, cause);
+		return {
+			ok: false,
+			response: fail(500, {
+				...failureData,
+				success: false,
+				message: messages.operational
+			})
+		} as const;
+	}
 }
 
 export const load: PageServerLoad = async ({ params, locals }) => {
-	if (!locals.user) {
-		throw redirect(302, '/auth');
-	}
+	const athleteId = requireAthleteId(locals);
 
-	const workoutId = parseWorkoutId(params.workoutId);
+	const workoutId = positiveRouteId(params.workoutId);
 	if (!workoutId) {
 		throw error(404, 'Workout not found.');
 	}
@@ -39,8 +88,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	let availableExercises;
 	try {
 		[workout, availableExercises] = await Promise.all([
-			trainingSession.get(locals.user.id, workoutId),
-			workoutService.getExercises(locals.user.id)
+			trainingSession.get(athleteId, workoutId),
+			workoutBuilder.listAvailableExercises(athleteId)
 		]);
 	} catch (cause) {
 		logOperationalFailure('workout.load', cause);
@@ -56,8 +105,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
 export const actions: Actions = {
 	repeatWorkout: async ({ request, locals, params }) => {
-		if (!locals.user) throw redirect(302, '/auth');
-		const routeWorkoutId = parseWorkoutId(params.workoutId);
+		const athleteId = requireAthleteId(locals);
+		const routeWorkoutId = positiveRouteId(params.workoutId);
 		const formData = await request.formData();
 		const values = {
 			workoutId: String(formData.get('workoutId') ?? ''),
@@ -76,33 +125,37 @@ export const actions: Actions = {
 			});
 		}
 
-		let repeatedWorkout;
-		try {
-			repeatedWorkout = await workoutService.repeatWorkout(locals.user.id, result.data);
-		} catch (cause) {
-			if (cause instanceof WorkoutDomainError) {
-				return fail(404, {
-					intent: 'repeatWorkout' as const,
-					success: false,
-					message: 'Workout not found.',
-					errors: {},
-					values
-				});
-			}
-			logOperationalFailure('workout.repeat', cause);
-			return fail(500, {
+		const applied = await applyBuilderCommand(
+			'workout.repeat',
+			athleteId,
+			{
+				type: 'repeat_prescription',
+				prescriptionId: result.data.workoutId,
+				repeatToken: result.data.repeatToken,
+				date: result.data.date
+			},
+			{
 				intent: 'repeatWorkout' as const,
-				success: false,
-				message: 'Could not repeat this workout. Please try again.',
 				errors: {},
 				values
-			});
+			},
+			{
+				notFound: 'Workout not found.',
+				invalidTransition: 'This Workout Prescription cannot be repeated.',
+				conflict: 'That repeat request has already been used.',
+				operational: 'Could not repeat this workout. Please try again.'
+			}
+		);
+		if (!applied.ok) return applied.response;
+		const outcome = applied.outcome;
+		if (outcome.command !== 'repeat_prescription') {
+			throw new Error('Workout Builder returned the wrong command outcome.');
 		}
-		throw redirect(303, `/workouts/${repeatedWorkout.id}`);
+		throw redirect(303, `/workouts/${outcome.prescriptionId}`);
 	},
 	updateWorkout: async ({ request, locals, params }) => {
-		if (!locals.user) throw redirect(302, '/auth');
-		const routeWorkoutId = parseWorkoutId(params.workoutId);
+		const athleteId = requireAthleteId(locals);
+		const routeWorkoutId = positiveRouteId(params.workoutId);
 		const formData = await request.formData();
 		const values = {
 			workoutId: String(formData.get('workoutId') ?? ''),
@@ -122,27 +175,28 @@ export const actions: Actions = {
 			});
 		}
 
-		try {
-			await workoutService.updateWorkout(locals.user.id, result.data);
-		} catch (cause) {
-			if (cause instanceof WorkoutDomainError) {
-				return fail(404, {
-					intent: 'updateWorkout' as const,
-					success: false,
-					message: 'Workout not found.',
-					errors: {},
-					values
-				});
-			}
-			logOperationalFailure('workout.update', cause);
-			return fail(500, {
+		const applied = await applyBuilderCommand(
+			'workout.update',
+			athleteId,
+			{
+				type: 'update_prescription',
+				prescriptionId: result.data.workoutId,
+				name: result.data.name,
+				date: result.data.date,
+				notes: result.data.notes
+			},
+			{
 				intent: 'updateWorkout' as const,
-				success: false,
-				message: 'Could not update this workout. Please try again.',
 				errors: {},
 				values
-			});
-		}
+			},
+			{
+				notFound: 'Workout not found.',
+				invalidTransition: 'Finished Workout Prescriptions cannot be edited.',
+				operational: 'Could not update this workout. Please try again.'
+			}
+		);
+		if (!applied.ok) return applied.response;
 
 		return {
 			intent: 'updateWorkout' as const,
@@ -154,8 +208,8 @@ export const actions: Actions = {
 	},
 
 	deleteWorkout: async ({ request, locals, params }) => {
-		if (!locals.user) throw redirect(302, '/auth');
-		const routeWorkoutId = parseWorkoutId(params.workoutId);
+		const athleteId = requireAthleteId(locals);
+		const routeWorkoutId = positiveRouteId(params.workoutId);
 		const formData = await request.formData();
 		const result = workoutMutationSchema.safeParse({ workoutId: formData.get('workoutId') });
 		if (!result.success || result.data.workoutId !== routeWorkoutId)
@@ -167,35 +221,28 @@ export const actions: Actions = {
 				values: {}
 			});
 
-		try {
-			await workoutService.deleteWorkout(locals.user.id, result.data.workoutId);
-		} catch (cause) {
-			if (cause instanceof WorkoutDomainError) {
-				return fail(404, {
-					intent: 'deleteWorkout' as const,
-					success: false,
-					message: 'Workout not found.',
-					errors: {},
-					values: {}
-				});
-			}
-			logOperationalFailure('workout.delete', cause);
-			return fail(500, {
+		const applied = await applyBuilderCommand(
+			'workout.delete',
+			athleteId,
+			{ type: 'delete_prescription', prescriptionId: result.data.workoutId },
+			{
 				intent: 'deleteWorkout' as const,
-				success: false,
-				message: 'Could not delete this workout. Please try again.',
 				errors: {},
 				values: {}
-			});
-		}
+			},
+			{
+				notFound: 'Workout not found.',
+				invalidTransition: 'This Workout Prescription can no longer be deleted.',
+				operational: 'Could not delete this workout. Please try again.'
+			}
+		);
+		if (!applied.ok) return applied.response;
 		throw redirect(303, '/');
 	},
 	addExercise: async ({ request, locals, params }) => {
-		if (!locals.user) {
-			throw redirect(302, '/auth');
-		}
+		const athleteId = requireAthleteId(locals);
 
-		const workoutId = parseWorkoutId(params.workoutId);
+		const workoutId = positiveRouteId(params.workoutId);
 		if (!workoutId) {
 			return fail(400, {
 				intent: 'addExercise' as const,
@@ -224,30 +271,26 @@ export const actions: Actions = {
 			});
 		}
 
-		try {
-			await workoutService.addExerciseToWorkout(locals.user.id, {
-				workoutId,
+		const applied = await applyBuilderCommand(
+			'workout.add_exercise',
+			athleteId,
+			{
+				type: 'add_prescription_exercise',
+				prescriptionId: workoutId,
 				...result.data
-			});
-		} catch (cause) {
-			if (cause instanceof WorkoutDomainError) {
-				return fail(404, {
-					intent: 'addExercise' as const,
-					success: false,
-					message: 'Exercise not found.',
-					errors: {},
-					values
-				});
-			}
-			logOperationalFailure('workout.add_exercise', cause);
-			return fail(500, {
+			},
+			{
 				intent: 'addExercise' as const,
-				success: false,
-				message: 'Could not add that exercise. Please try again.',
 				errors: {},
 				values
-			});
-		}
+			},
+			{
+				notFound: 'Exercise not found.',
+				invalidTransition: 'Finished Workout Prescriptions cannot be edited.',
+				operational: 'Could not add that exercise. Please try again.'
+			}
+		);
+		if (!applied.ok) return applied.response;
 
 		return {
 			intent: 'addExercise' as const,
@@ -259,11 +302,9 @@ export const actions: Actions = {
 	},
 
 	createExercise: async ({ request, locals, params }) => {
-		if (!locals.user) {
-			throw redirect(302, '/auth');
-		}
+		const athleteId = requireAthleteId(locals);
 
-		const workoutId = parseWorkoutId(params.workoutId);
+		const workoutId = positiveRouteId(params.workoutId);
 		if (!workoutId) {
 			return fail(400, {
 				intent: 'createExercise' as const,
@@ -292,31 +333,27 @@ export const actions: Actions = {
 			});
 		}
 
-		try {
-			await workoutService.createExerciseForWorkout(locals.user.id, {
-				workoutId,
+		const applied = await applyBuilderCommand(
+			'workout.create_exercise',
+			athleteId,
+			{
+				type: 'create_custom_exercise',
+				prescriptionId: workoutId,
 				...result.data
-			});
-		} catch (cause) {
-			const conflict = cause instanceof ExerciseNameConflictError;
-			if (conflict || cause instanceof WorkoutDomainError) {
-				return fail(conflict ? 409 : 404, {
-					intent: 'createExercise' as const,
-					success: false,
-					message: conflict ? cause.message : 'Workout not found.',
-					errors: {},
-					values
-				});
-			}
-			logOperationalFailure('workout.create_exercise', cause);
-			return fail(500, {
+			},
+			{
 				intent: 'createExercise' as const,
-				success: false,
-				message: 'Could not create that Custom Exercise. Please try again.',
 				errors: {},
 				values
-			});
-		}
+			},
+			{
+				notFound: 'Workout not found.',
+				invalidTransition: 'Finished Workout Prescriptions cannot be edited.',
+				conflict: 'A Custom Exercise with that name already exists.',
+				operational: 'Could not create that Custom Exercise. Please try again.'
+			}
+		);
+		if (!applied.ok) return applied.response;
 
 		return {
 			intent: 'createExercise' as const,
@@ -328,9 +365,7 @@ export const actions: Actions = {
 	},
 
 	addSet: async ({ request, locals }) => {
-		if (!locals.user) {
-			throw redirect(302, '/auth');
-		}
+		const athleteId = requireAthleteId(locals);
 
 		const formData = await request.formData();
 		const values = {
@@ -339,8 +374,7 @@ export const actions: Actions = {
 			reps: String(formData.get('reps') ?? ''),
 			weight: String(formData.get('weight') ?? ''),
 			weightUnit: String(formData.get('weightUnit') ?? 'kg'),
-			restTimeSeconds: String(formData.get('restTimeSeconds') ?? ''),
-			completed: String(formData.get('completed') ?? '')
+			restTimeSeconds: String(formData.get('restTimeSeconds') ?? '')
 		};
 		const result = addSetSchema.safeParse(values);
 		const targetId = Number(formData.get('workoutExerciseId')) || null;
@@ -356,29 +390,31 @@ export const actions: Actions = {
 			});
 		}
 
-		try {
-			await workoutService.addSetToWorkoutExercise(locals.user.id, result.data);
-		} catch (cause) {
-			if (cause instanceof WorkoutDomainError) {
-				return fail(404, {
-					intent: 'addSet' as const,
-					success: false,
-					targetId,
-					message: 'Exercise entry not found.',
-					errors: {},
-					values
-				});
-			}
-			logOperationalFailure('workout.add_set', cause);
-			return fail(500, {
+		const applied = await applyBuilderCommand(
+			'workout.add_set',
+			athleteId,
+			{
+				type: 'add_set_target',
+				prescriptionExerciseId: result.data.workoutExerciseId,
+				setNumber: result.data.setNumber,
+				reps: result.data.reps,
+				weight: result.data.weight,
+				weightUnit: result.data.weightUnit,
+				restTimeSeconds: result.data.restTimeSeconds
+			},
+			{
 				intent: 'addSet' as const,
-				success: false,
 				targetId,
-				message: 'Could not save that set. Please try again.',
 				errors: {},
 				values
-			});
-		}
+			},
+			{
+				notFound: 'Prescription Exercise not found.',
+				invalidTransition: 'Finished Workout Prescriptions cannot be edited.',
+				operational: 'Could not save that set. Please try again.'
+			}
+		);
+		if (!applied.ok) return applied.response;
 
 		return {
 			intent: 'addSet' as const,
@@ -392,14 +428,13 @@ export const actions: Actions = {
 				reps: '',
 				weight: '',
 				weightUnit: 'kg',
-				restTimeSeconds: '',
-				completed: ''
+				restTimeSeconds: ''
 			}
 		};
 	},
 
 	updateSet: async ({ request, locals }) => {
-		if (!locals.user) throw redirect(302, '/auth');
+		const athleteId = requireAthleteId(locals);
 		const formData = await request.formData();
 		const values = {
 			setId: String(formData.get('setId') ?? ''),
@@ -408,8 +443,7 @@ export const actions: Actions = {
 			reps: String(formData.get('reps') ?? ''),
 			weight: String(formData.get('weight') ?? ''),
 			weightUnit: String(formData.get('weightUnit') ?? 'kg'),
-			restTimeSeconds: String(formData.get('restTimeSeconds') ?? ''),
-			completed: String(formData.get('completed') ?? '')
+			restTimeSeconds: String(formData.get('restTimeSeconds') ?? '')
 		};
 		const result = updateSetSchema.safeParse(values);
 		const targetId = Number(formData.get('workoutExerciseId')) || null;
@@ -423,29 +457,32 @@ export const actions: Actions = {
 				values
 			});
 
-		try {
-			await workoutService.updateSet(locals.user.id, result.data);
-		} catch (cause) {
-			if (cause instanceof WorkoutDomainError) {
-				return fail(404, {
-					intent: 'updateSet' as const,
-					success: false,
-					targetId,
-					message: 'Set not found.',
-					errors: {},
-					values
-				});
-			}
-			logOperationalFailure('workout.update_set', cause);
-			return fail(500, {
+		const applied = await applyBuilderCommand(
+			'workout.update_set',
+			athleteId,
+			{
+				type: 'update_set_target',
+				prescriptionExerciseId: result.data.workoutExerciseId,
+				setTargetId: result.data.setId,
+				setNumber: result.data.setNumber,
+				reps: result.data.reps,
+				weight: result.data.weight,
+				weightUnit: result.data.weightUnit,
+				restTimeSeconds: result.data.restTimeSeconds
+			},
+			{
 				intent: 'updateSet' as const,
-				success: false,
 				targetId,
-				message: 'Could not update that set. Please try again.',
 				errors: {},
 				values
-			});
-		}
+			},
+			{
+				notFound: 'Set not found.',
+				invalidTransition: 'This Set Target can no longer be edited.',
+				operational: 'Could not update that set. Please try again.'
+			}
+		);
+		if (!applied.ok) return applied.response;
 		return {
 			intent: 'updateSet' as const,
 			success: true,
@@ -457,7 +494,7 @@ export const actions: Actions = {
 	},
 
 	deleteSet: async ({ request, locals }) => {
-		if (!locals.user) throw redirect(302, '/auth');
+		const athleteId = requireAthleteId(locals);
 		const formData = await request.formData();
 		const result = setMutationSchema.safeParse({ setId: formData.get('setId') });
 		if (!result.success)
@@ -468,27 +505,22 @@ export const actions: Actions = {
 				errors: {},
 				values: {}
 			});
-		try {
-			await workoutService.deleteSet(locals.user.id, result.data.setId);
-		} catch (cause) {
-			if (cause instanceof WorkoutDomainError) {
-				return fail(404, {
-					intent: 'deleteSet' as const,
-					success: false,
-					message: 'Set not found.',
-					errors: {},
-					values: {}
-				});
-			}
-			logOperationalFailure('workout.delete_set', cause);
-			return fail(500, {
+		const applied = await applyBuilderCommand(
+			'workout.delete_set',
+			athleteId,
+			{ type: 'delete_set_target', setTargetId: result.data.setId },
+			{
 				intent: 'deleteSet' as const,
-				success: false,
-				message: 'Could not delete that set. Please try again.',
 				errors: {},
 				values: {}
-			});
-		}
+			},
+			{
+				notFound: 'Set not found.',
+				invalidTransition: 'This Set Target can no longer be deleted.',
+				operational: 'Could not delete that set. Please try again.'
+			}
+		);
+		if (!applied.ok) return applied.response;
 		return {
 			intent: 'deleteSet' as const,
 			success: true,
@@ -499,7 +531,7 @@ export const actions: Actions = {
 	},
 
 	removeExercise: async ({ request, locals }) => {
-		if (!locals.user) throw redirect(302, '/auth');
+		const athleteId = requireAthleteId(locals);
 		const formData = await request.formData();
 		const result = workoutExerciseMutationSchema.safeParse({
 			workoutExerciseId: formData.get('workoutExerciseId')
@@ -508,31 +540,29 @@ export const actions: Actions = {
 			return fail(400, {
 				intent: 'removeExercise' as const,
 				success: false,
-				message: 'Invalid exercise entry.',
+				message: 'Invalid Prescription Exercise.',
 				errors: {},
 				values: {}
 			});
-		try {
-			await workoutService.removeExerciseFromWorkout(locals.user.id, result.data.workoutExerciseId);
-		} catch (cause) {
-			if (cause instanceof WorkoutDomainError) {
-				return fail(404, {
-					intent: 'removeExercise' as const,
-					success: false,
-					message: 'Exercise entry not found.',
-					errors: {},
-					values: {}
-				});
-			}
-			logOperationalFailure('workout.remove_exercise', cause);
-			return fail(500, {
+		const applied = await applyBuilderCommand(
+			'workout.remove_exercise',
+			athleteId,
+			{
+				type: 'remove_prescription_exercise',
+				prescriptionExerciseId: result.data.workoutExerciseId
+			},
+			{
 				intent: 'removeExercise' as const,
-				success: false,
-				message: 'Could not remove that exercise. Please try again.',
 				errors: {},
 				values: {}
-			});
-		}
+			},
+			{
+				notFound: 'Prescription Exercise not found.',
+				invalidTransition: 'This Prescription Exercise can no longer be removed.',
+				operational: 'Could not remove that exercise. Please try again.'
+			}
+		);
+		if (!applied.ok) return applied.response;
 		return {
 			intent: 'removeExercise' as const,
 			success: true,

@@ -28,7 +28,6 @@ test('an Athlete can run, resume, finish, and reopen a Training Session', async 
 		await addSetForm.getByLabel('Reps').fill(reps);
 		await addSetForm.getByLabel('Weight').fill(weight);
 		await addSetForm.getByLabel('Rest').fill('2');
-		await addSetForm.getByLabel('Completed').uncheck();
 		await addSetForm.getByRole('button', { name: 'Add set' }).click();
 		await expect(page.locator('tbody tr')).toHaveCount(index + 1);
 	}
@@ -79,12 +78,12 @@ test('an Athlete can run, resume, finish, and reopen a Training Session', async 
 			notes: ''
 		}
 	});
-	expect(await lockedEdit.json()).toMatchObject({ type: 'failure', status: 404 });
+	expect(await lockedEdit.json()).toMatchObject({ type: 'failure', status: 409 });
 	const lockedDelete = await page.request.post(`${detailUrl}?/deleteWorkout`, {
 		headers: actionHeaders,
 		form: { workoutId }
 	});
-	expect(await lockedDelete.json()).toMatchObject({ type: 'failure', status: 404 });
+	expect(await lockedDelete.json()).toMatchObject({ type: 'failure', status: 409 });
 
 	await page.getByRole('button', { name: 'Reopen Training Session' }).click();
 	await expect(page.getByRole('button', { name: 'Finish Training Session' })).toBeVisible();

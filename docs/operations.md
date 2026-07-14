@@ -8,7 +8,7 @@ A local database created by the retired schema-push workflow must be recreated b
 
 ## Operational failures
 
-Route adapters classify PostgreSQL SQLSTATE, `postgres` connection, and Node socket errors as operational failures. Expected `WorkoutDomainError` and known Better Auth credential/email-conflict responses retain their 4xx outcomes; every other service failure writes a structured error event with its operation name and returns a generic internal failure to the Athlete.
+Workout Builder and Training Session commands return typed domain rejections that route adapters preserve as 4xx outcomes. Known Better Auth credential and email-conflict responses do the same. Unexpected database, PostgreSQL SQLSTATE, `postgres` connection, Node socket, and invariant failures remain operational errors: adapters write a structured error event with the operation name and return a generic internal failure to the Athlete.
 
 ## Local database
 

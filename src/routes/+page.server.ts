@@ -1,16 +1,15 @@
 import { logOperationalFailure } from '$lib/server/operational-log';
-import { workoutService } from '$lib/server/services/workout.service';
-import { error, redirect } from '@sveltejs/kit';
+import { workoutBuilder } from '$lib/server/services/workout-builder';
+import { requireAthleteId } from '$lib/server/workout-route';
+import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
-	if (!locals.user) {
-		throw redirect(302, '/auth');
-	}
+	const athleteId = requireAthleteId(locals);
 
 	try {
 		return {
-			workouts: await workoutService.getWorkoutsByUserId(locals.user.id)
+			workouts: await workoutBuilder.listPrescriptions(athleteId)
 		};
 	} catch (cause) {
 		logOperationalFailure('workout.list', cause);

@@ -1,14 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
-	class WorkoutDomainError extends Error {}
-	return { WorkoutDomainError, addSetToWorkoutExercise: vi.fn() };
+	return { execute: vi.fn() };
 });
 
-vi.mock('$lib/server/services/workout.service', () => ({
-	WorkoutDomainError: mocks.WorkoutDomainError,
-	ExerciseNameConflictError: class ExerciseNameConflictError extends Error {},
-	workoutService: { addSetToWorkoutExercise: mocks.addSetToWorkoutExercise }
+vi.mock('$lib/server/services/workout-builder', () => ({
+	workoutBuilder: {
+		execute: mocks.execute,
+		listAvailableExercises: vi.fn(),
+		listPrescriptions: vi.fn()
+	}
 }));
 
 import { actions } from '../../routes/workouts/[workoutId]/+page.server';
@@ -30,26 +31,40 @@ function addSetRequest() {
 }
 
 describe('workout detail actions', () => {
-	afterEach(() => vi.restoreAllMocks());
+	afterEach(() => {
+		mocks.execute.mockReset();
+		vi.restoreAllMocks();
+	});
 
-	it('keeps an expected workout-domain failure separate from operational logging', async () => {
+	it('maps a not-found command outcome without operational logging', async () => {
 		const operationalLog = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-		mocks.addSetToWorkoutExercise.mockRejectedValue(
-			new mocks.WorkoutDomainError('Exercise entry not found.')
-		);
+		mocks.execute.mockResolvedValue({ ok: false, code: 'not_found' });
 
 		const result = await actions.addSet(addSetRequest());
 
 		expect(result).toMatchObject({
 			status: 404,
-			data: { message: 'Exercise entry not found.' }
+			data: { message: 'Prescription Exercise not found.' }
+		});
+		expect(operationalLog).not.toHaveBeenCalled();
+	});
+
+	it('maps an invalid transition to a conflict response', async () => {
+		const operationalLog = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		mocks.execute.mockResolvedValue({ ok: false, code: 'invalid_transition' });
+
+		const result = await actions.addSet(addSetRequest());
+
+		expect(result).toMatchObject({
+			status: 409,
+			data: { message: 'Finished Workout Prescriptions cannot be edited.' }
 		});
 		expect(operationalLog).not.toHaveBeenCalled();
 	});
 
 	it('logs an unexpected failure and returns a generic server error', async () => {
 		const operationalLog = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-		mocks.addSetToWorkoutExercise.mockRejectedValue(new Error('Failed to add set.'));
+		mocks.execute.mockRejectedValue(new Error('Failed to add set.'));
 
 		const result = await actions.addSet(addSetRequest());
 

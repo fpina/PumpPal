@@ -376,16 +376,8 @@
 																	value={exerciseSet.restTimeSeconds ?? ''}
 																/>
 															</div>
-															<label
-																class="flex items-center gap-2 self-end pb-3 text-sm font-bold text-[#b1c0b8]"
-																><input
-																	type="checkbox"
-																	name="completed"
-																	checked={exerciseSet.completed}
-																	class="size-4 accent-[#c8ff3d]"
-																/> Completed</label
+															<button type="submit" class="button-primary self-end">Save set</button
 															>
-															<button type="submit" class="button-primary">Save set</button>
 														</form>
 														<form
 															method="POST"
@@ -493,11 +485,8 @@
 								placeholder="sec"
 							/>
 						</div>
-						<div>
-							<label
-								class="mb-2 flex items-center gap-2 text-[0.67rem] font-bold uppercase tracking-wider text-[#80938a]"
-								><input type="checkbox" name="completed" checked class="size-4 accent-[#c8ff3d]" /> Completed</label
-							><button type="submit" class="button-primary !min-h-11 w-full !py-2">Add set</button>
+						<div class="flex items-end">
+							<button type="submit" class="button-primary !min-h-11 w-full !py-2">Add set</button>
 						</div>
 					</form>
 					{#if form?.intent === 'addSet' && form.targetId === workoutExercise.id && !form.success && Object.keys(form.errors).length > 0}<p
