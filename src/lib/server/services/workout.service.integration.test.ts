@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { databaseTest } from '../../../../tests/harness/integration';
 import { describe, expect } from 'vitest';
 import { workoutService } from './workout.service';
+import { trainingSession } from './training-session';
 
 describe('WorkoutService training records', () => {
 	databaseTest(
@@ -28,15 +29,15 @@ describe('WorkoutService training records', () => {
 			});
 			expect(targetSet).toMatchObject({ completed: false, status: 'planned' });
 
-			await workoutService.startWorkout(athlete.id, createdWorkout.id);
-			await workoutService.activateSet(athlete.id, createdWorkout.id, targetSet.id);
-			await workoutService.completeLiveSet(athlete.id, createdWorkout.id, {
-				setId: targetSet.id,
+			await trainingSession.start(athlete.id, createdWorkout.id);
+			await trainingSession.activateSetTarget(athlete.id, createdWorkout.id, targetSet.id);
+			await trainingSession.recordSetResult(athlete.id, createdWorkout.id, {
+				setTargetId: targetSet.id,
 				reps: 9,
 				weight: 102.5,
 				weightUnit: 'kg'
 			});
-			await workoutService.finishWorkout(athlete.id, createdWorkout.id);
+			await trainingSession.finish(athlete.id, createdWorkout.id);
 
 			const firstFinish = await workoutService.getWorkoutById(athlete.id, createdWorkout.id);
 			expect(firstFinish?.workoutExercises[0].sets[0]).toMatchObject({
@@ -62,10 +63,13 @@ describe('WorkoutService training records', () => {
 				actualWeight: null
 			});
 
-			await workoutService.reopenWorkout(athlete.id, createdWorkout.id);
-			await expect(
-				workoutService.activateSet(athlete.id, createdWorkout.id, targetSet.id)
-			).rejects.toThrow('Set is not available.');
+			await trainingSession.reopen(athlete.id, createdWorkout.id);
+			expect(
+				await trainingSession.activateSetTarget(athlete.id, createdWorkout.id, targetSet.id)
+			).toEqual({
+				ok: false,
+				code: 'invalid_transition'
+			});
 			await expect(
 				workoutService.updateSet(athlete.id, {
 					workoutExerciseId: workoutEntry.id,
@@ -80,7 +84,7 @@ describe('WorkoutService training records', () => {
 			await expect(workoutService.deleteSet(athlete.id, targetSet.id)).rejects.toThrow(
 				'Set not found.'
 			);
-			await workoutService.finishWorkout(athlete.id, createdWorkout.id);
+			await trainingSession.finish(athlete.id, createdWorkout.id);
 
 			const resumed = await workoutService.getWorkoutById(athlete.id, createdWorkout.id);
 			expect(resumed?.finishedAt).toEqual(originalFinishedAt);

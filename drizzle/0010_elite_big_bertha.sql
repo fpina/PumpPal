@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "training_segment_one_open_per_workout_unique" ON "training_segment" USING btree ("workout_id") WHERE "training_segment"."finished_at" is null;

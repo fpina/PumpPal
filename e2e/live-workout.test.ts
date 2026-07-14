@@ -33,16 +33,16 @@ test('an Athlete can run, resume, finish, and reopen a Training Session', async 
 		await expect(page.locator('tbody tr')).toHaveCount(index + 1);
 	}
 
-	await page.getByRole('link', { name: 'Start workout' }).click();
+	await page.getByRole('link', { name: 'Start Training Session' }).click();
 	await expect(page).toHaveURL(`${detailUrl}/live`);
-	await page.getByRole('button', { name: 'Start workout' }).click();
+	await page.getByRole('button', { name: 'Start Training Session' }).click();
 	await expect(page.getByText('0 / 2 sets complete')).toBeVisible();
 
 	const firstSet = page.locator('.live-set').first();
-	await firstSet.getByRole('button', { name: 'Start set' }).click();
+	await firstSet.getByRole('button', { name: 'Activate Set Target' }).click();
 	await firstSet.getByLabel('Set Result reps').fill('9');
 	await firstSet.getByLabel('Set Result load').fill('102.5');
-	await firstSet.getByRole('button', { name: 'Complete set' }).click();
+	await firstSet.getByRole('button', { name: 'Record Set Result' }).click();
 	await expect(page.getByText('1 / 2 sets complete')).toBeVisible();
 	await expect(page.getByText('Rest timer')).toBeVisible();
 
@@ -54,14 +54,14 @@ test('an Athlete can run, resume, finish, and reopen a Training Session', async 
 	await expect(page.getByText('Rest complete', { exact: true })).toBeVisible({ timeout: 5_000 });
 
 	const secondSet = page.locator('.live-set').nth(1);
-	await secondSet.getByRole('button', { name: 'Skip' }).click();
+	await secondSet.getByRole('button', { name: 'Skip Set Target' }).click();
 	await expect(secondSet.getByText('skipped', { exact: true })).toBeVisible();
 
 	await page.goto(detailUrl);
-	await expect(page.getByRole('link', { name: 'Resume workout' })).toBeVisible();
-	await page.getByRole('link', { name: 'Resume workout' }).click();
+	await expect(page.getByRole('link', { name: 'Resume Training Session' })).toBeVisible();
+	await page.getByRole('link', { name: 'Resume Training Session' }).click();
 	page.once('dialog', (dialog) => dialog.accept());
-	await page.getByRole('button', { name: 'Finish workout' }).click();
+	await page.getByRole('button', { name: 'Finish Training Session' }).click();
 	await expect(page.getByRole('heading', { name: 'Session locked.' })).toBeVisible();
 	await expect(page.getByText('1 Training Segment')).toBeVisible();
 
@@ -87,15 +87,15 @@ test('an Athlete can run, resume, finish, and reopen a Training Session', async 
 	expect(await lockedDelete.json()).toMatchObject({ type: 'failure', status: 404 });
 
 	await page.getByRole('button', { name: 'Reopen Training Session' }).click();
-	await expect(page.getByRole('button', { name: 'Finish workout' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Finish Training Session' })).toBeVisible();
 	await expect(
 		page.locator('.live-set').first().getByText('Set Result 9 reps · 102.5 kg')
 	).toBeVisible();
 	await expect(
-		page.locator('.live-set').first().getByRole('button', { name: 'Start set' })
+		page.locator('.live-set').first().getByRole('button', { name: 'Activate Set Target' })
 	).toHaveCount(0);
 	page.once('dialog', (dialog) => dialog.accept());
-	await page.getByRole('button', { name: 'Finish workout' }).click();
+	await page.getByRole('button', { name: 'Finish Training Session' }).click();
 	await expect(page.getByText('2 Training Segments')).toBeVisible();
 	await page.goto(detailUrl);
 	await expect(page.getByText('Set Target: 8 reps · 100 kg')).toBeVisible();

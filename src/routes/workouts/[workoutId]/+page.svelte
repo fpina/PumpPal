@@ -8,7 +8,7 @@
 	let repeatDate = $state('');
 
 	const workoutDate = $derived(data.workout.date);
-	const historyLocked = $derived(data.workout.finishedAt !== null);
+	const historyLocked = $derived(!data.workout.capabilities.canEditPrescription);
 
 	onMount(() => {
 		repeatDate = currentWorkoutDate();
@@ -36,13 +36,13 @@
 			<div class="flex flex-col items-start gap-5 lg:items-end">
 				<a
 					href={`/workouts/${data.workout.id}/live`}
-					class={data.workout.sessionStatus === 'active' ? 'button-primary' : 'button-secondary'}
+					class={data.workout.capabilities.canResume ? 'button-primary' : 'button-secondary'}
 				>
-					{data.workout.sessionStatus === 'planned'
-						? 'Start workout'
-						: data.workout.sessionStatus === 'active'
-							? 'Resume workout'
-							: 'View finished workout'}
+					{data.workout.capabilities.canStart
+						? 'Start Training Session'
+						: data.workout.capabilities.canResume
+							? 'Resume Training Session'
+							: 'View finished Training Session'}
 				</a>
 				<div class="flex flex-wrap gap-7">
 					<div class="metric">

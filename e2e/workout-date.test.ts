@@ -30,8 +30,8 @@ test('an Athlete can create, edit, and repeat an exact Workout Date in UTC+14', 
 	await expect(page.getByLabel('Workout Date')).toHaveValue('2027-01-02');
 	await expect(page.getByText('January 2, 2027')).toBeVisible();
 
-	await page.getByRole('link', { name: 'Start workout' }).click();
-	await page.getByRole('button', { name: 'Start workout' }).click();
+	await page.getByRole('link', { name: 'Start Training Session' }).click();
+	await page.getByRole('button', { name: 'Start Training Session' }).click();
 	await expect(page.locator('.session-clock')).toHaveAttribute(
 		'aria-label',
 		/Workout duration 00:[01]\d/
