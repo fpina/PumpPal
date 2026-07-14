@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import { activeDurationSeconds, formatDuration, remainingRestSeconds } from '$lib/live-workout';
 	import { onMount } from 'svelte';
 
@@ -51,7 +52,10 @@
 
 <div class="live-shell">
 	<header class="live-header">
-		<a href={`/workouts/${data.workout.id}`} class="back-link">← Workout details</a>
+		<a
+			href={resolve('/workouts/[workoutId]', { workoutId: String(data.workout.id) })}
+			class="back-link">← Workout details</a
+		>
 		<div class="live-heading">
 			<div>
 				<p class="eyebrow">Live training</p>

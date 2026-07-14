@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import { currentWorkoutDate, formatWorkoutDate } from '$lib/workout-date';
 	import { onMount } from 'svelte';
 
@@ -20,7 +21,7 @@
 </script>
 
 <div class="space-y-8">
-	<a href="/" class="back-link">← Back to workouts</a>
+	<a href={resolve('/')} class="back-link">← Back to workouts</a>
 
 	<section class="sport-stripe surface px-6 py-8 sm:px-9 sm:py-10">
 		<div class="relative z-10 flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
@@ -35,7 +36,9 @@
 			</div>
 			<div class="flex flex-col items-start gap-5 lg:items-end">
 				<a
-					href={`/workouts/${data.workout.id}/live`}
+					href={resolve('/workouts/[workoutId]/live', {
+						workoutId: String(data.workout.id)
+					})}
 					class={data.workout.capabilities.canResume ? 'button-primary' : 'button-secondary'}
 				>
 					{data.workout.capabilities.canStart
