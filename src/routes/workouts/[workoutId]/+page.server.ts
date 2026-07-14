@@ -3,6 +3,7 @@ import {
 	WorkoutDomainError,
 	workoutService
 } from '$lib/server/services/workout.service';
+import { trainingSession } from '$lib/server/services/training-session';
 import { logOperationalFailure } from '$lib/server/operational-log';
 import {
 	addExerciseSchema,
@@ -38,7 +39,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	let availableExercises;
 	try {
 		[workout, availableExercises] = await Promise.all([
-			workoutService.getWorkoutById(locals.user.id, workoutId),
+			trainingSession.get(locals.user.id, workoutId),
 			workoutService.getExercises(locals.user.id)
 		]);
 	} catch (cause) {

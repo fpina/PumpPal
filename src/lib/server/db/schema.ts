@@ -265,6 +265,9 @@ export const trainingSegment = pgTable(
 		createdAt: timestamp('created_at').defaultNow().notNull()
 	},
 	(table) => [
+		uniqueIndex('training_segment_one_open_per_workout_unique')
+			.on(table.workoutId)
+			.where(sql`${table.finishedAt} is null`),
 		check(
 			'training_segment_completion_check',
 			sql`(${table.finishedAt} is null and ${table.durationSeconds} is null) or (${table.finishedAt} is not null and ${table.durationSeconds} >= 0 and ${table.finishedAt} >= ${table.startedAt})`

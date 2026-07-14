@@ -83,17 +83,17 @@
 
 	{#if form?.message}<p class="status-message">{form.message}</p>{/if}
 
-	{#if data.workout.sessionStatus === 'planned'}
+	{#if data.workout.capabilities.canStart}
 		<section class="start-card surface sport-stripe">
 			<p class="eyebrow">Ready when you are</p>
 			<h2>Start strong.</h2>
 			<p>Your targets are set. Starting records the session time and unlocks set tracking.</p>
 			<form method="POST" action="?/start" use:enhance>
 				<input type="hidden" name="workoutId" value={data.workout.id} />
-				<button type="submit" class="button-primary">Start workout</button>
+				<button type="submit" class="button-primary">Start Training Session</button>
 			</form>
 		</section>
-	{:else if data.workout.sessionStatus === 'finished'}
+	{:else if data.workout.capabilities.canReopen}
 		<section class="start-card surface">
 			<p class="eyebrow">Training Session finished</p>
 			<h2>Session locked.</h2>
@@ -105,10 +105,12 @@
 				{data.workout.trainingSegments.length}
 				{data.workout.trainingSegments.length === 1 ? 'Training Segment' : 'Training Segments'}
 			</p>
-			<form method="POST" action="?/reopen" use:enhance>
-				<input type="hidden" name="workoutId" value={data.workout.id} />
-				<button type="submit" class="button-secondary">Reopen Training Session</button>
-			</form>
+			{#if data.workout.capabilities.canReopen}
+				<form method="POST" action="?/reopen" use:enhance>
+					<input type="hidden" name="workoutId" value={data.workout.id} />
+					<button type="submit" class="button-secondary">Reopen Training Session</button>
+				</form>
+			{/if}
 		</section>
 	{:else}
 		<main class="exercise-stack">
@@ -145,8 +147,8 @@
 									</div>
 									<span class="status-pill">{exerciseSet.status}</span>
 								</div>
-								{#if exerciseSet.status === 'active'}
-									<form method="POST" action="?/completeSet" use:enhance class="actual-form">
+								{#if exerciseSet.capabilities.canComplete}
+									<form method="POST" action="?/recordSetResult" use:enhance class="actual-form">
 										<input type="hidden" name="setId" value={exerciseSet.id} />
 										<label
 											>Set Result reps<input
@@ -173,25 +175,29 @@
 												></select
 											></label
 										>
-										<button type="submit" class="button-primary">Complete set</button>
+										<button type="submit" class="button-primary">Record Set Result</button>
 									</form>
-								{:else if exerciseSet.status !== 'completed'}
+								{:else if exerciseSet.capabilities.canActivate || exerciseSet.capabilities.canSkip}
 									<div class="set-actions">
-										<form method="POST" action="?/activateSet" use:enhance>
-											<input type="hidden" name="setId" value={exerciseSet.id} /><button
-												type="submit"
-												class="button-primary"
-												>{exerciseSet.status === 'skipped'
-													? 'Restore & start'
-													: 'Start set'}</button
-											>
-										</form>
-										<form method="POST" action="?/skipSet" use:enhance>
-											<input type="hidden" name="setId" value={exerciseSet.id} /><button
-												type="submit"
-												class="button-ghost">Skip</button
-											>
-										</form>
+										{#if exerciseSet.capabilities.canActivate}
+											<form method="POST" action="?/activateSetTarget" use:enhance>
+												<input type="hidden" name="setId" value={exerciseSet.id} /><button
+													type="submit"
+													class="button-primary"
+													>{exerciseSet.status === 'skipped'
+														? 'Restore & start'
+														: 'Activate Set Target'}</button
+												>
+											</form>
+										{/if}
+										{#if exerciseSet.capabilities.canSkip}
+											<form method="POST" action="?/skipSetTarget" use:enhance>
+												<input type="hidden" name="setId" value={exerciseSet.id} /><button
+													type="submit"
+													class="button-ghost">Skip Set Target</button
+												>
+											</form>
+										{/if}
 									</div>
 								{/if}
 							</article>
@@ -200,10 +206,12 @@
 				</section>
 			{/each}
 		</main>
-		<form method="POST" action="?/finish" use:enhance onsubmit={confirmFinish} class="finish-bar">
-			<input type="hidden" name="workoutId" value={data.workout.id} />
-			<button type="submit">Finish workout</button>
-		</form>
+		{#if data.workout.capabilities.canFinish}
+			<form method="POST" action="?/finish" use:enhance onsubmit={confirmFinish} class="finish-bar">
+				<input type="hidden" name="workoutId" value={data.workout.id} />
+				<button type="submit">Finish Training Session</button>
+			</form>
+		{/if}
 	{/if}
 </div>
 

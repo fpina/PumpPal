@@ -71,6 +71,13 @@
       "when": 1783970511021,
       "tag": "0009_curved_molly_hayes",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1783979360758,
+      "tag": "0010_elite_big_bertha",
+      "breakpoints": true
     }
   ]
 }

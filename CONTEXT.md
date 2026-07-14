@@ -40,6 +40,14 @@ _Avoid_: Session date, calendar time
 The amount of active time accumulated during a Training Session.
 _Avoid_: Duration timestamp, elapsed date
 
+**Transition Outcome**:
+A typed result from a Training Session command: either a named successful transition or a meaningful `not_found`/`invalid_transition` rejection.
+_Avoid_: Generic domain exception, form error
+
+**Session Capability**:
+A stable statement from the Training Session module describing an action currently available to an Athlete, such as starting, finishing, reopening, or completing a Set Target.
+_Avoid_: UI state guess, route permission
+
 **Exercise Catalog**:
 The combined collection of shared Catalog Exercises and an Athlete's private Custom Exercises that may be added to a Workout Prescription.
 _Avoid_: Exercise library, master list

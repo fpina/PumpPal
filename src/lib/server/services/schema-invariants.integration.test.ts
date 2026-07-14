@@ -1,8 +1,9 @@
 import { db } from '$lib/server/db';
-import { set } from '$lib/server/db/schema';
+import { set, trainingSegment } from '$lib/server/db/schema';
 import { databaseTest } from '../../../../tests/harness/integration';
 import { expect } from 'vitest';
 import { workoutService } from './workout.service';
+import { trainingSession } from './training-session';
 
 databaseTest(
 	'a default Set Target satisfies the planned persistence invariants',
@@ -59,3 +60,21 @@ databaseTest('Set Targets reject invalid persisted values', async ({ harness }) 
 		cause: { code: '23514', constraint_name: 'set_reps_nonnegative_check' }
 	});
 });
+
+databaseTest(
+	'a Training Session cannot persist two open Training Segments',
+	async ({ harness }) => {
+		const athlete = await harness.athlete();
+		const workout = await workoutService.createWorkout(athlete.id, {
+			name: 'Segment invariant workout',
+			date: '2026-07-13'
+		});
+		await trainingSession.start(athlete.id, workout.id);
+
+		await expect(
+			db.insert(trainingSegment).values({ workoutId: workout.id, startedAt: new Date() })
+		).rejects.toMatchObject({
+			cause: { code: '23505', constraint_name: 'training_segment_one_open_per_workout_unique' }
+		});
+	}
+);
