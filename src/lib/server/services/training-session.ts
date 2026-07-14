@@ -31,7 +31,8 @@ export interface RecordSetResultCommand {
 }
 
 export type TrainingSessionOutcome<T extends string> =
-	{ ok: true; transition: T } | { ok: false; code: 'not_found' | 'invalid_transition' };
+	| { ok: true; transition: T }
+	| { ok: false; code: 'not_found' | 'invalid_transition' };
 
 export function prescriptionIsEditable(finishedAt: Date | null) {
 	return finishedAt === null;
