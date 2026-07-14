@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
+
 	let { form } = $props();
 </script>
 
@@ -74,7 +76,7 @@
 			</form>
 			<p class="mt-6 text-center text-sm text-[#7e9188]">
 				Already part of PumpPal? <a
-					href="/auth"
+					href={resolve('/auth')}
 					class="font-bold text-[#c8ff3d] no-underline hover:text-white">Sign in</a
 				>
 			</p>

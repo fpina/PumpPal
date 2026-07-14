@@ -51,21 +51,29 @@ test('an athlete can repeat populated and empty workouts without duplicating sub
 	await expect(page.locator('article h3')).toHaveText([warmupName, exerciseName, exerciseName]);
 	await expect(page.getByText('Planned', { exact: true })).toBeVisible();
 	await expect(page.getByText('Set Target: 8 reps · 70 kg')).toBeVisible();
+	const repeatedUrl = page.url();
 
+	await page.getByRole('link', { name: 'Start Training Session' }).click();
+	await page.getByRole('button', { name: 'Start Training Session' }).click();
+	const liveSet = page.locator('.live-set').first();
+	await liveSet.getByRole('button', { name: 'Activate Set Target' }).click();
+	await liveSet.getByLabel('Set Result reps').fill('9');
+	await liveSet.getByLabel('Set Result load').fill('70');
+	await liveSet.getByRole('button', { name: 'Record Set Result' }).click();
+	page.once('dialog', (dialog) => dialog.accept());
+	await page.getByRole('button', { name: 'Finish Training Session' }).click();
+
+	await page.goto(repeatedUrl);
 	const repeatedExercise = page.locator('article').nth(2);
-	await repeatedExercise.getByText('Edit', { exact: true }).click();
-	const editForm = repeatedExercise.getByRole('button', { name: 'Save set' }).locator('..');
-	await expect(editForm.getByLabel('Completed')).not.toBeChecked();
-	await editForm.getByLabel('Reps').fill('9');
-	await editForm.getByLabel('Completed').check();
-	await editForm.getByRole('button', { name: 'Save set' }).click();
 	await expect(repeatedExercise.getByText('Complete', { exact: true })).toBeVisible();
-	await expect(repeatedExercise.getByText('Set Target: 9 reps · 70 kg')).toBeVisible();
+	await expect(repeatedExercise.getByText('Set Target: 8 reps · 70 kg')).toBeVisible();
+	await expect(repeatedExercise.getByText('Set Result: 9 reps · 70 kg')).toBeVisible();
 
 	await page.goto(sourceUrl);
 	const unchangedSourceExercise = page.locator('article').nth(2);
 	await expect(unchangedSourceExercise.getByText('Set Target: 8 reps · 70 kg')).toBeVisible();
-	await expect(unchangedSourceExercise.getByText('Complete', { exact: true })).toBeVisible();
+	await expect(unchangedSourceExercise.getByText('Planned', { exact: true })).toBeVisible();
+	await expect(unchangedSourceExercise.getByText('Set Result: —')).toBeVisible();
 
 	await page.goto('/');
 	await expect(page.getByRole('link', { name: 'Repeatable push day' })).toHaveCount(2);

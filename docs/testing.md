@@ -5,7 +5,7 @@ PumpPal's database-backed tests never use the development database directly. The
 ## Test seams
 
 - Unit tests cover in-process behavior without PostgreSQL.
-- Integration tests call workout domain interfaces against `local_test_integration` and reset all application data before each test.
+- Integration tests call the Workout Builder and Training Session interfaces against `local_test_integration` and reset all application data before each test.
 - Playwright tests use `local_test_e2e`; the shared Athlete fixture owns registration, login, unique credentials, and cascade cleanup.
 - Browser journeys cover route wiring, accessibility, and Athlete behavior. Transaction, lifecycle, ownership, repetition, and ordering rules belong primarily at the domain interface.
 

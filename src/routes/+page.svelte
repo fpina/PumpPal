@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { formatWorkoutDate } from '$lib/workout-date';
 
 	let { data } = $props();
@@ -19,7 +20,7 @@
 			</div>
 			<div class="flex flex-wrap items-end gap-7">
 				<div class="metric"><strong>{data.workouts.length}</strong><span>Total sessions</span></div>
-				<a href="/workouts/new" class="button-primary">
+				<a href={resolve('/workouts/new')} class="button-primary">
 					<svg
 						viewBox="0 0 24 24"
 						class="size-4"
@@ -52,7 +53,7 @@
 				{#each data.workouts as workout, index (workout.id)}
 					<li>
 						<a
-							href={`/workouts/${workout.id}`}
+							href={resolve('/workouts/[workoutId]', { workoutId: String(workout.id) })}
 							class="group surface block h-full overflow-hidden p-5 text-white no-underline transition hover:-translate-y-1 hover:border-[#c8ff3d]/35 hover:shadow-[0_22px_60px_rgba(0,0,0,0.3)]"
 						>
 							<div class="mb-8 flex items-start justify-between">
@@ -109,7 +110,7 @@
 				<p class="mt-2 max-w-md text-sm leading-6 text-[#82958c]">
 					Show up, log the work, and start building a training history you can be proud of.
 				</p>
-				<a href="/workouts/new" class="button-primary mt-6">Start training</a>
+				<a href={resolve('/workouts/new')} class="button-primary mt-6">Start training</a>
 			</div>
 		{/if}
 	</section>

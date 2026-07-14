@@ -20,6 +20,10 @@ _Avoid_: Workout log, live workout
 The prescribed reps, load, load unit, and rest guidance for one set.
 _Avoid_: Planned set, expected set
 
+**Prescription Exercise**:
+One ordered Catalog Exercise or Custom Exercise selection inside a Workout Prescription, including exercise-specific notes and its Set Targets.
+_Avoid_: Workout exercise, junction entry
+
 **Set Result**:
 The reps and load an Athlete actually performs for a Set Target.
 _Avoid_: Actual set, completed set
@@ -42,6 +46,14 @@ _Avoid_: Duration timestamp, elapsed date
 
 **Transition Outcome**:
 A typed result from a Training Session command: either a named successful transition or a meaningful `not_found`/`invalid_transition` rejection.
+_Avoid_: Generic domain exception, form error
+
+**Workout Builder**:
+The server module that owns Workout Prescription creation, editing, repetition, Prescription Exercise and Set Target management, ownership checks, editability, and transaction boundaries.
+_Avoid_: Workout service, route action service
+
+**Builder Command Outcome**:
+A typed result from a Workout Builder command: either a named success or a meaningful `not_found`, `invalid_transition`, or `conflict` rejection. Unexpected infrastructure failures remain operational errors.
 _Avoid_: Generic domain exception, form error
 
 **Session Capability**:

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
+
 	let { form } = $props();
 </script>
 
@@ -88,7 +90,7 @@
 					>New to the crew?</span
 				><span class="h-px flex-1 bg-white/7"></span>
 			</div>
-			<a href="/auth/register" class="button-ghost w-full">Create your account</a>
+			<a href={resolve('/auth/register')} class="button-ghost w-full">Create your account</a>
 		</div>
 	</div>
 </section>

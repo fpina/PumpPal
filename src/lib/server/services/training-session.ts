@@ -38,10 +38,6 @@ export function prescriptionIsEditable(finishedAt: Date | null) {
 	return finishedAt === null;
 }
 
-export function editablePrescriptionCondition() {
-	return isNull(workout.finishedAt);
-}
-
 export function capabilitiesFor(
 	status: WorkoutSessionStatus,
 	canEditPrescription: boolean

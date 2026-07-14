@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import '../app.css';
 
 	let { children, data } = $props();
@@ -6,7 +7,7 @@
 
 <header class="sticky top-0 z-50 border-b border-white/6 bg-[#07100c]/86 backdrop-blur-xl">
 	<nav class="app-container flex h-[4.5rem] items-center justify-between">
-		<a href="/" class="group flex items-center gap-2.5 text-white no-underline">
+		<a href={resolve('/')} class="group flex items-center gap-2.5 text-white no-underline">
 			<span
 				class="grid size-9 rotate-3 place-items-center rounded-xl bg-[#c8ff3d] text-[#07100c] shadow-[0_0_28px_rgba(200,255,61,0.18)] transition-transform group-hover:-rotate-3"
 			>
@@ -38,7 +39,7 @@
 						</p>
 					</div>
 				</div>
-				<a href="/workouts/new" class="button-primary !min-h-10 !px-3 sm:!px-4">
+				<a href={resolve('/workouts/new')} class="button-primary !min-h-10 !px-3 sm:!px-4">
 					<svg
 						viewBox="0 0 24 24"
 						class="size-4"
@@ -64,8 +65,8 @@
 					</button>
 				</form>
 			{:else}
-				<a href="/auth" class="button-ghost !min-h-10">Sign in</a>
-				<a href="/auth/register" class="button-primary !min-h-10">Join now</a>
+				<a href={resolve('/auth')} class="button-ghost !min-h-10">Sign in</a>
+				<a href={resolve('/auth/register')} class="button-primary !min-h-10">Join now</a>
 			{/if}
 		</div>
 	</nav>

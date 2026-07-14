@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import { currentWorkoutDate } from '$lib/workout-date';
 	import { onMount } from 'svelte';
 
@@ -12,7 +13,7 @@
 </script>
 
 <section class="mx-auto max-w-5xl">
-	<a href="/" class="back-link">← Back to workouts</a>
+	<a href={resolve('/')} class="back-link">← Back to workouts</a>
 	<div class="mt-5 grid gap-5 lg:grid-cols-[1fr_0.48fr]">
 		<div class="surface p-6 sm:p-9">
 			<p class="eyebrow">New session</p>

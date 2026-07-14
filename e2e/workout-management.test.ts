@@ -114,8 +114,7 @@ test('an athlete can edit and delete their workout log while other users cannot 
 				reps: '99',
 				weight: '',
 				weightUnit: 'kg',
-				restTimeSeconds: '',
-				completed: 'on'
+				restTimeSeconds: ''
 			}
 		}),
 		page.request.post(`${privateWorkoutUrl}?/deleteSet`, {
